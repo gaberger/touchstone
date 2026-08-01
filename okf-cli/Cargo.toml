@@ -10,7 +10,9 @@ name = "touchstone"
 path = "src/main.rs"
 
 [dependencies]
+okf-ports = { path = "../okf-ports" }
 okf-usecases = { path = "../okf-usecases" }
+clap = { version = "4", features = ["derive"] }
 okf-cli-adapter = { path = "../okf-adapters/primary/cli" }
 okf-mcp-adapter = { path = "../okf-adapters/primary/mcp" }
 okf-yaml-serde = { path = "../okf-adapters/secondary/yaml-serde" }
@@ -19,3 +21,4 @@ okf-sqlite-index = { path = "../okf-adapters/secondary/sqlite-index" }
 okf-git-attest = { path = "../okf-adapters/secondary/git-attest" }
 okf-crdt-sync = { path = "../okf-adapters/secondary/crdt-sync" }
 okf-embed-local = { path = "../okf-adapters/secondary/embed-local" }
+rusqlite = { version = "0.40", features = ["bundled"] }
