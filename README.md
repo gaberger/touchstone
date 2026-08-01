@@ -1,8 +1,36 @@
 # OKF Second Brain
 
-A knowledge base / second brain built on [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+**Provenance and portability for machine-written knowledge.**
+
+Built on [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
 v0.2 — Google Cloud's open spec for representing knowledge as a directory of markdown
 concepts with YAML frontmatter.
+
+## Why this exists
+
+In April 2026 Karpathy published a pattern that spread fast: point an LLM at your raw
+sources and have it *compile* a markdown wiki, rather than retrieving over your notes with
+RAG. Three layers — `raw/` (immutable), `wiki/` (generated), and a `CLAUDE.md` schema. One
+topic reached ~100 articles and 400,000 words nobody typed.
+
+The architecture is right, and this project is the same shape. What the pattern leaves open
+is what happens once most of your knowledge base is machine-written:
+
+| the pattern | what is missing | what okf adds |
+|---|---|---|
+| `raw/` is authoritative | — | same rule: raw bytes are truth, frontmatter is a query view |
+| `wiki/` is regenerable | — | A1, enforced by the T1 drill |
+| `CLAUDE.md` is a private schema | no interchange, no portability | **an open spec** — bundles move between tools, byte-losslessly |
+| generated pages read like facts | no way to tell what was verified | **trust tiers** — `verified` > `attested` > `generated`, derived and never authored |
+
+So the bet is not "an LLM can maintain a wiki" — that is settled and freely available. The
+bet is that once it does, you will need to know **which parts you can rely on** and **how to
+leave with your corpus**. Those are format and provenance problems, and they are what this
+is for.
+
+That also names the real mess: knowledge management was already fragmented across tools that
+do not interoperate, and machine-written knowledge is about to make the fragmentation worse
+and the reliability question urgent at the same time.
 
 **Status: Stage 1 walking skeleton.** The design is adjudicated and the core claims are
 tested; the two highest-risk assumptions are not yet answered.

@@ -12,7 +12,7 @@ likely killer. Ranked by *(probability wrong × cost of learning late) ÷ cost t
 
 | # | Assumption | If wrong | Cost to test | When |
 |---|---|---|---|---|
-| **A10** | This beats `rg` + Obsidian by enough to justify existing | **Project-fatal** | Hours | **First** |
+| **A10** | This beats **Karpathy's `raw/`+`wiki/`+CLAUDE.md folder** by enough to justify existing | **Project-fatal** | Hours | **First** |
 | **A3** | R2 — a human will actually write into it unprompted | **Project-fatal** | Cheap, but needs 2–3 weeks elapsed | Starts week 1, reads out week 3 |
 | **A1** | Everything above L1 is reconstructible from L1 | Design-fatal — the core claim | ~1 day | Stage 1 |
 | **A2** | Round-trip is byte-lossless incl. unknown keys | Design-fatal — "portable" becomes a slogan | ~1 day | Stage 1 |
@@ -21,7 +21,7 @@ likely killer. Ranked by *(probability wrong × cost of learning late) ÷ cost t
 | **A8** | Trust tiers (`verified` > `generated`) improve results | A whole frontmatter family is decoration | ~1 day | Stage 3 |
 | **A5** | Latency holds at 100k–1M concepts | Adds ANN; changes nothing structural | Expensive — needs corpus | Stage 4 |
 | **A7** | CRDT write path loses no updates, corrupts no YAML | Rebuild the write path | Expensive | Stage 5 |
-| **A9** | Capture agents don't pollute the brain faster than curation cleans | Agents become net-negative | Weeks | Stage 5 |
+| **A9** | Capture agents don't pollute the brain faster than curation cleans | Agents become net-negative — **and this is now the category's central risk, not a late one** | Weeks | **Promoted: trust tiers are the answer, so A8 carries it** |
 
 **A10 and A3 are the two nobody ever tests, and the two that kill knowledge-base projects.**
 A5 and A7 — the ones the adversaries spent their energy on — are the *least* urgent, because
@@ -29,12 +29,28 @@ being wrong about them changes an implementation, not the design.
 
 ## 1. A10 — the null hypothesis, first
 
-Before building anything, establish the control. The honest baseline is:
+Before building anything, establish the control. **The baseline moved in April 2026.**
+Beating `rg` + Obsidian is no longer the bar, because the thing to beat is now free, viral,
+and already sitting in people's repos:
+
+```bash
+mkdir kb && cd kb
+mkdir raw wiki                     # Karpathy's pattern: raw sources in, LLM compiles wiki
+$EDITOR CLAUDE.md                  # the schema, such as it is
+claude "read raw/ and update wiki/"
+```
+
+Run the same 20 questions against **that**, not against grep. The older control is still
+worth ten minutes as a floor, but it is no longer the honest competitor:
 
 ```bash
 mkdir brain && cd brain   # markdown files, no frontmatter discipline, no tooling
 rg -i "search term"       # plus Obsidian for links and backlinks
 ```
+
+The question A10 now has to answer is narrower and harder: **what do the open format and the
+trust tiers buy that the gist does not?** If the answer is "nothing you would notice in 20
+questions", that is the kill.
 
 Take 20 real questions you'd want your brain to answer. Answer them with `rg` + Obsidian
 over your existing notes. Record: how many were answerable, how long each took, and where
