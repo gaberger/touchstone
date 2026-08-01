@@ -1,4 +1,4 @@
-# Layer 3 -- usecases. Domain + ports only.
+# Layer 3 -- usecases. Domain + ports only (plus external crates -- ARCHITECTURE.md rule 3).
 [package]
 name = "okf-usecases"
 version.workspace = true
