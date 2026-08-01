@@ -1,0 +1,7 @@
+# Layer 1 -- pure domain. No dependencies, by design.
+[package]
+name = "okf-domain"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

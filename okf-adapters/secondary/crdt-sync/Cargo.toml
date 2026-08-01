@@ -1,0 +1,8 @@
+# Secondary adapter for SyncEngine. Ports only.
+[package]
+name = "okf-crdt-sync"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+okf-ports = { path = "../../../okf-ports" }

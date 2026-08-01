@@ -1,0 +1,16 @@
+# Composition root -- the ONLY crate allowed to import adapters (rule 6).
+[package]
+name = "okf-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+okf-usecases = { path = "../okf-usecases" }
+okf-cli-adapter = { path = "../okf-adapters/primary/cli" }
+okf-mcp-adapter = { path = "../okf-adapters/primary/mcp" }
+okf-yaml-serde = { path = "../okf-adapters/secondary/yaml-serde" }
+okf-fs-bundle = { path = "../okf-adapters/secondary/fs-bundle" }
+okf-sqlite-index = { path = "../okf-adapters/secondary/sqlite-index" }
+okf-git-attest = { path = "../okf-adapters/secondary/git-attest" }
+okf-crdt-sync = { path = "../okf-adapters/secondary/crdt-sync" }
+okf-embed-local = { path = "../okf-adapters/secondary/embed-local" }

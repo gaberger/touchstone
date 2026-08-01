@@ -1,0 +1,8 @@
+# Primary adapter -- mcp.
+[package]
+name = "okf-mcp-adapter"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+okf-ports = { path = "../../../okf-ports" }

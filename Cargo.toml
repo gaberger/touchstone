@@ -1,0 +1,26 @@
+# okf Rust workspace.
+#
+# The hexagonal rules in ARCHITECTURE.md are enforced by THIS dependency graph, not by a linter:
+# a crate can only import what its [dependencies] declare, so a violation is a COMPILE ERROR.
+# Cargo also forbids dependency cycles outright. `okf-cli/tests/architecture.rs` guards the graph
+# itself, so the enforcement cannot be quietly relaxed by adding a dependency.
+[workspace]
+resolver = "2"
+members = [
+  "okf-domain",
+  "okf-ports",
+  "okf-usecases",
+  "okf-adapters/primary/cli",
+  "okf-adapters/primary/mcp",
+  "okf-adapters/secondary/yaml-serde",
+  "okf-adapters/secondary/fs-bundle",
+  "okf-adapters/secondary/sqlite-index",
+  "okf-adapters/secondary/git-attest",
+  "okf-adapters/secondary/crdt-sync",
+  "okf-adapters/secondary/embed-local",
+  "okf-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"

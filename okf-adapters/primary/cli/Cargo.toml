@@ -1,0 +1,8 @@
+# Primary adapter -- cli.
+[package]
+name = "okf-cli-adapter"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+okf-ports = { path = "../../../okf-ports" }

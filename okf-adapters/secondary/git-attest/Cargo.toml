@@ -1,0 +1,8 @@
+# Secondary adapter for VersionControl. Ports only.
+[package]
+name = "okf-git-attest"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+okf-ports = { path = "../../../okf-ports" }
