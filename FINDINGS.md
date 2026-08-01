@@ -241,6 +241,57 @@ the files valid, which is what it was primarily justified by.
 Stage 1 alongside `brain index`. The CRDT moves behind the adoption test — if A3 shows one
 person barely writing into the brain, concurrent editing was never the bottleneck.
 
+---
+
+## E4 — the drills against upstream OKF, not our own fixture
+
+FINDINGS' own "Still open" list named this: *"T2 against the upstream sample bundles (`ga4`,
+`stackoverflow`, `crypto_bitcoin`) — the fixture is adversarial but self-authored, which is its
+weakness."* It had never been run because `tests/drills.py` hard-coded `bundle = root / "_fixture"`.
+The four bundles from `GoogleCloudPlatform/knowledge-catalog` are now vendored at `_upstream/` and the
+drills take a bundle argument.
+
+**The load-bearing claims survive.** T2a raw round-trip is **byte-identical on all four bundles** —
+A2 holds against OKF authored by people who did not know our assumptions. T2b semantic round-trip,
+T2d no-timestamp-coercion (E3a's fix holds on real data), T2e fmt safety and T6 service-death pass
+everywhere; T1 passes on three of four.
+
+### E4a — a reserved FILENAME silently drops a legitimate concept
+
+`brain/okf.py:21` — `RESERVED = {"index.md", "log.md"}`. `acme_retail/log.md` is a real concept with
+`type: Log` and a title. Brain indexes 9 of that bundle's 10 concepts and reports nothing.
+
+This contradicts our own stated rule: *"The spec's tolerance is honored, not narrowed. Unknown `type`
+values, unknown frontmatter keys, and broken links are all preserved and indexed."* A reserved
+*filename* narrows the spec in exactly the way the design forbids — and the spec authors' own bundle
+uses that name for a concept.
+
+**Verdict: a real defect. The reservation must move from the filename to something the spec actually
+reserves, or be dropped.**
+
+### E4b — A1 fails on real data
+
+`acme_retail/attesters/` contains only `sql_equality.py` — no markdown. Upstream ships an
+`attesters/index.md` for it; T1 deletes generated index files and brain does not regenerate that one,
+because the directory holds no concepts. So a real bundle contains a derived artifact brain cannot
+reconstruct, which is **A1 — "everything above L1 is reconstructible from L1", listed in the ledger as
+design-fatal.**
+
+The honest nuance: this could be called an upstream bug rather than ours. But it is a genuine
+disagreement about what OKF permits, surfaced exactly where this document predicted the fixture was
+weak. Deciding it is deciding whether we honor the spec's tolerance or our reading of it.
+
+**Verdict: A1 is falsified as stated. Either brain reconstructs index.md for concept-free directories,
+or A1 must be narrowed to directories that contain concepts.**
+
+### Not defects — the drills are not yet bundle-portable
+
+Three failures were test artifacts, verified before being reported. `T2c` hard-codes a lookup for
+`adversarial/unknown-type.md`, a fixture-only file. Both search drills assume the fixture's vocabulary —
+they search for "index" and filter `type: Decision`, while upstream types are BigQuery, Reference,
+Metric, Policy, Attested, Skill and Log. Making the drills bundle-portable is follow-up work; until
+then a non-fixture run reports three false failures.
+
 ## Still open
 
 - **Revocation** — unaddressed by any experiment, and the surviving argument for a
@@ -248,7 +299,5 @@ person barely writing into the brain, concurrent editing was never the bottlenec
 - **A10 / A3** (does it beat grep; will anyone write into it) — need the real corpus and
   three weeks. Unchanged, and now the **only** things standing between this and a verdict.
 - **A6 on real embeddings with ANN** — before deleting the corporate seam for good.
-- **T2 against the upstream sample bundles** (`ga4`, `stackoverflow`, `crypto_bitcoin`) —
-  the fixture is adversarial but *self-authored*, which is its weakness. Real OKF written
-  by people who did not know our assumptions is the stronger test, and it has not been run.
+- ~~**T2 against the upstream sample bundles**~~ — run; see E4. A2 survives; A1 does not.
 - **Scale** — the fixture is 25 concepts. Nothing here says anything about 50k.

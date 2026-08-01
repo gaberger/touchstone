@@ -232,9 +232,15 @@ def t_search_smoke(bundle: Path) -> None:
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[1]
-    bundle = root / "_fixture"
-    tmp = root / "_export"
+    # Optional bundle argument. The self-authored fixture is the default, but FINDINGS notes it is
+    # "adversarial but self-authored, which is its weakness" -- real OKF written by people who did not
+    # know our assumptions is the stronger test. Without this the drills could only ever run against
+    # our own fixture, which is why T2-against-upstream had never been run.
+    bundle = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else root / "_fixture"
+    tmp = root / ("_export" if len(sys.argv) < 2 else f"_export-{bundle.name}")
     if not bundle.exists():
+        print(f"no such bundle: {bundle}")
+        print("usage: python tests/drills.py [BUNDLE_DIR]   (default: _fixture)")
         print("build the fixture first: python tests/make_fixture.py _fixture")
         sys.exit(2)
 
