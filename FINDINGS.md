@@ -335,9 +335,35 @@ correct where the oracle is wrong**, which is the outcome the differential exist
 disagreement is only useful if you already know which side should win, and FINDINGS recorded that
 before the Rust existed.
 
-**Still outstanding before the Python prototype can be deleted:** `tests/drills.py` shells out to
-`python -m touchstone`, so T1/T2/T6 have never run against the Rust binary. Parity on index/export/stats
-is not parity on the drills.
+### E5a — the drills, run both ways
+
+`tests/drills.py` now takes `--impl python|rust`. Against `_fixture`:
+
+| | python | rust |
+|---|---|---|
+| T1 rebuild / T1b idempotence | PASS | PASS |
+| T2a raw round-trip | PASS | PASS |
+| T2c unknown keys + types | PASS | PASS |
+| T6 service-death | PASS | PASS (25 recovered) |
+| search smoke / structured filter | PASS | PASS |
+| **T2b, T2d, T2e** | PASS | **N/A** |
+
+The three N/A drills import the Python `okf` module directly — they test a *library API*, not the CLI,
+so there is nothing to route to a binary. That is a property of the drill, not a gap in the port. Each
+is covered by a Rust unit test instead:
+
+| drill | Rust equivalent |
+|---|---|
+| T2b semantic round-trip | `parse::tests::format_roundtrip`, plus E5's byte-exact export |
+| T2d no timestamp coercion | `parse_temporal_stays_string`, `temporal_values_stay_iso8601_strings`, `combined_unknown_key_unknown_type_and_iso8601_timestamp` |
+| T2e fmt safety | `is_risky()` (anchors / merge keys / block scalars) + `format_skips_risky_constructs`, `format_skips_when_reserialize_changes_values` |
+
+Recording the mapping because the bare "N/A" reads like missing coverage — it isn't, and a first pass at
+checking it produced a false alarm from a badly-chosen grep.
+
+**Remaining before the Python prototype can be deleted:** nothing functional. It stays only as long as
+it is useful as a second opinion; T2b/T2d/T2e would need expressing through the CLI to be checked
+identically against both, which is the only reason to keep it after that.
 
 ## Still open
 
