@@ -20,7 +20,7 @@ fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()
 }
 
-/// Path-dependency names declared by a crate, in declaration order-insensitive form.
+/// All dependency key names declared by a crate (internal and external alike).
 fn deps_of(rel: &str) -> BTreeSet<String> {
     let manifest = workspace_root().join(rel).join("Cargo.toml");
     let text = fs::read_to_string(&manifest)
@@ -43,6 +43,19 @@ fn deps_of(rel: &str) -> BTreeSet<String> {
         }
     }
     out
+}
+
+/// Internal (okf-*) deps only — used for layering checks.
+///
+/// Adapters may freely depend on external crates (e.g. `serde_yaml_ng`, `rusqlite`).
+/// The layering rule only governs *internal* workspace crates: an adapter must not bypass
+/// `okf-ports` to reach `okf-domain` or `okf-usecases` directly, and must never import
+/// a sibling adapter. External crates are invisible to the layer model.
+fn internal_deps_of(rel: &str) -> BTreeSet<String> {
+    deps_of(rel)
+        .into_iter()
+        .filter(|name| name.starts_with("okf-"))
+        .collect()
 }
 
 const SECONDARY: [&str; 6] = ["yaml-serde", "fs-bundle", "sqlite-index", "git-attest", "crdt-sync", "embed-local"];
@@ -80,12 +93,16 @@ fn rule_3_usecases_never_name_an_adapter() {
 fn rule_4_adapters_import_ports_only() {
     // Note this is only satisfiable because okf-ports RE-EXPORTS the domain value types. Without
     // that, every adapter would need its own okf-domain dependency and rule 4 would be aspirational.
+    //
+    // Only *internal* (okf-*) deps are checked here: adapters may freely depend on external
+    // crates (serde_yaml_ng, rusqlite, gix, …). The layering rule governs which workspace
+    // crates an adapter may reach — external crates are invisible to the layer model.
     for (rel, name) in SECONDARY.iter().map(|a| (format!("okf-adapters/secondary/{a}"), format!("okf-{a}")))
         .chain(PRIMARY.iter().map(|a| (format!("okf-adapters/primary/{a}"), format!("okf-{a}-adapter"))))
     {
-        let deps = deps_of(&rel);
+        let deps = internal_deps_of(&rel);
         assert_eq!(deps, BTreeSet::from(["okf-ports".to_string()]),
-            "{name} must depend on okf-ports only, found {deps:?}");
+            "{name} must depend on okf-ports only (internal deps), found {deps:?}");
     }
 }
 

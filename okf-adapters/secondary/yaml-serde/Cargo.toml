@@ -6,3 +6,4 @@ edition.workspace = true
 
 [dependencies]
 okf-ports = { path = "../../../okf-ports" }
+serde_yaml_ng = "0.10.0"
