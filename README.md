@@ -44,21 +44,43 @@ tested; the two highest-risk assumptions are not yet answered.
 | [PROTOTYPE.md](PROTOTYPE.md) | How to falsify all of it. Assumption ledger ranked by risk, pre-registered kill criteria |
 | [FINDINGS.md](FINDINGS.md) | Experimental results. Three experiments so far; two overturned load-bearing claims |
 
-## Quick start
+## Status: Rust, mid-port
+
+**Touchstone is a Rust project.** The implementation lives in a 12-crate hexagonal workspace whose
+layering is enforced by Cargo itself — a boundary violation is a compile error, not a lint
+(`okf-cli/tests/architecture.rs` guards the dependency graph that makes that true).
+
+| layer | crate | state |
+|---|---|---|
+| domain | `okf-domain` | types only, zero dependencies |
+| ports | `okf-ports` | 7 traits |
+| use cases | `okf-usecases` | in progress |
+| adapters | `okf-yaml-serde` FrontmatterParser | **done** — temporal values stay ISO 8601 strings (E3a) |
+| | `okf-fs-bundle` ConceptRepository | **done** — `log.md` is a concept, not a reserved name (E4a) |
+| | `okf-sqlite-index` SearchIndex | **done** — FTS5 + structured prefilter |
+| | `okf-git-attest` VersionControl | **done** |
+| | `crdt-sync`, `embed-local` | deferred — gated on A7 and A4, untested assumptions |
+| composition | `okf-cli` | in progress |
+
+```bash
+cargo check --workspace && cargo test --workspace
+```
+
+### The Python prototype
+
+`touchstone/` is the original Stage 1 walking skeleton **being ported from**, and it is currently the
+only implementation that runs end to end. It stays until the Rust CLI reaches parity, because it is
+the **differential oracle**: the Rust port is checked against it byte-for-byte, and the case for Rust
+in [RUST-PATH.md](RUST-PATH.md) is a measurement of one against the other. Where they disagree,
+[FINDINGS.md](FINDINGS.md) records which is wrong — E3a and E4a are both defects in the Python one.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pyyaml
-```
-
-```bash
 .venv/bin/python tests/make_fixture.py _fixture && .venv/bin/python -m touchstone --bundle _fixture index
+.venv/bin/python tests/drills.py    # T1 rebuild, T2 round-trip, T6 service-death
 ```
 
-Run the drills — T1 rebuild, T2 round-trip, T6 service-death:
-
-```bash
-.venv/bin/python tests/drills.py
-```
+It is deleted, not deprecated, once `touchstone index` runs in Rust and the differential run is clean.
 
 ## Commands
 
