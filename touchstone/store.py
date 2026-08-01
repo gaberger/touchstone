@@ -1,4 +1,4 @@
-"""Derived index. Disposable by construction -- `brain index` rebuilds it from
+"""Derived index. Disposable by construction -- `touchstone index` rebuilds it from
 the bundle alone. Nothing here is ever the source of truth (ARCHITECTURE.md §2).
 """
 from __future__ import annotations

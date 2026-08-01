@@ -62,7 +62,7 @@ it failed — *and why*. Failure modes worth separating:
 - **Absence** — the note was never written. → **no architecture fixes this. A3 is your problem.**
 
 **Kill criterion (pre-registered):** if ≥15 of 20 questions are answered acceptably by
-`rg` + Obsidian, stop. Build a frontmatter linter and a `brain new` template and go home.
+`rg` + Obsidian, stop. Build a frontmatter linter and a `touchstone new` template and go home.
 The rest of this architecture is unjustified.
 
 If the failures cluster on *structure*, that is the strongest possible evidence for the OKF
@@ -93,16 +93,16 @@ Smallest thing that tests A1 and A2. Roughly 300 lines. **No** CRDT, **no** ACL,
 vectors, **no** agents, **no** server.
 
 ```
-brain new <type> <title>    # scaffold conformant frontmatter
-brain index                 # parse → SQLite (concepts, FTS5, edges) → regenerate index.md
-brain search <query>        # structured filter + BM25, returns paths
-brain export <dir>          # write every concept back out
+touchstone new <type> <title>    # scaffold conformant frontmatter
+touchstone index                 # parse → SQLite (concepts, FTS5, edges) → regenerate index.md
+touchstone search <query>        # structured filter + BM25, returns paths
+touchstone export <dir>          # write every concept back out
 ```
 
 **T1 — rebuild drill.** The core claim of the whole architecture.
 
 ```bash
-rm -rf .brain/ && find . -name index.md -delete && brain index
+rm -rf .touchstone/ && find . -name index.md -delete && touchstone index
 git diff --exit-code
 ```
 
@@ -134,7 +134,7 @@ Runs concurrently with everything else. Convert your real notes, then **use it a
 only brain for three weeks.**
 
 The measurement is not a survey. It is: **did you write into it on days nobody asked you
-to?** Instrument `brain new` and count concepts created per day, split by whether you were
+to?** Instrument `touchstone new` and count concepts created per day, split by whether you were
 actively working on this project that day.
 
 *Kill criterion:* if concept-creation rate on non-project days trends to zero by week three,

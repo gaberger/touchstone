@@ -5,13 +5,14 @@ Each has a pre-registered kill criterion. Exit code is non-zero if any fails.
 from __future__ import annotations
 
 import subprocess
+import shutil
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from brain import okf                                     # noqa: E402
-from brain.cli import iter_concept_files, load_all        # noqa: E402
+from touchstone import okf                                     # noqa: E402
+from touchstone.cli import iter_concept_files, load_all        # noqa: E402
 
 PY = sys.executable
 RESULTS: list[tuple[str, bool, str]] = []
@@ -27,7 +28,7 @@ def sh(*a, cwd=None):
 
 
 def brain(bundle: Path, *a):
-    return sh(PY, "-m", "brain", "--bundle", str(bundle), *a,
+    return sh(PY, "-m", "touchstone", "--bundle", str(bundle), *a,
               cwd=str(Path(__file__).resolve().parents[1]))
 
 
@@ -40,7 +41,7 @@ def t1_rebuild(bundle: Path) -> None:
               for p in bundle.rglob("index.md")}
 
     # nuke everything derived
-    sh("rm", "-rf", str(bundle / ".brain"))
+    sh("rm", "-rf", str(bundle / ".touchstone"))
     for p in list(bundle.rglob("index.md")):
         p.unlink()
 
@@ -127,7 +128,7 @@ def t2_unknown_keys(bundle: Path) -> None:
     broken links. Verify we actually indexed them rather than dropping them."""
     import json as _json
     import sqlite3
-    db = bundle / ".brain" / "index.db"
+    db = bundle / ".touchstone" / "index.db"
     con = sqlite3.connect(db); con.row_factory = sqlite3.Row
     row = con.execute("SELECT fm_json,type FROM concepts WHERE path=?",
                       ("adversarial/unknown-type.md",)).fetchone()
@@ -199,12 +200,12 @@ def t6_service_death(bundle: Path, tmp: Path) -> None:
     bundle. KILL: concept count differs by >0."""
     brain(bundle, "index", "-q")
     import sqlite3
-    db = bundle / ".brain" / "index.db"
+    db = bundle / ".touchstone" / "index.db"
     con = sqlite3.connect(db)
     before = con.execute("SELECT COUNT(*) FROM concepts").fetchone()[0]
     con.close()
 
-    sh("rm", "-rf", str(bundle / ".brain"))
+    sh("rm", "-rf", str(bundle / ".touchstone"))
     for p in list(bundle.rglob("index.md")):
         p.unlink()
     r = brain(bundle, "index", "-q")
@@ -236,8 +237,22 @@ if __name__ == "__main__":
     # "adversarial but self-authored, which is its weakness" -- real OKF written by people who did not
     # know our assumptions is the stronger test. Without this the drills could only ever run against
     # our own fixture, which is why T2-against-upstream had never been run.
-    bundle = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else root / "_fixture"
-    tmp = root / ("_export" if len(sys.argv) < 2 else f"_export-{bundle.name}")
+    source = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else root / "_fixture"
+    tmp = root / ("_export" if len(sys.argv) < 2 else f"_export-{source.name}")
+
+    # T1 is DESTRUCTIVE by design -- it deletes every index.md and the derived dir to prove the
+    # rebuild is byte-identical. Run in place and it consumes the corpus it is testing: the first
+    # run of E4 deleted acme_retail/attesters/index.md (brain will not regenerate an index for a
+    # concept-free directory), which both destroyed vendored third-party data AND erased the
+    # evidence for the very defect it had just found. The failure is self-erasing -- a second run
+    # passes, because the missing file is no longer there to be missing.
+    #
+    # So: always work on a copy. The source bundle is read-only as far as the drills are concerned.
+    work = root / f"_work-{source.name}"
+    if work.exists():
+        shutil.rmtree(work)
+    shutil.copytree(source, work, ignore=shutil.ignore_patterns(".touchstone"))
+    bundle = work
     if not bundle.exists():
         print(f"no such bundle: {bundle}")
         print("usage: python tests/drills.py [BUNDLE_DIR]   (default: _fixture)")
@@ -262,4 +277,5 @@ if __name__ == "__main__":
     print(f"{len(RESULTS) - len(failed)}/{len(RESULTS)} passed")
     if failed:
         print("FAILED: " + ", ".join(failed))
+    shutil.rmtree(work, ignore_errors=True)
     sys.exit(1 if failed else 0)

@@ -116,7 +116,7 @@ This is a Stage 5 decision and we have not passed the Stage 1 gates. Concretely:
    irrelevant. Investing in custom VC before adoption is proven is the single most
    expensive way to be wrong.
 2. **Make the write path git-free at the UX level** (option A). Capture goes through
-   `brain new` and a CRDT checkpoint; git is a background sink. This gets essentially all
+   `touchstone new` and a CRDT checkpoint; git is a background sink. This gets essentially all
    of the mobile/latency benefit at a fraction of the cost.
 3. **Measure what git actually costs at scale** before assuming it is the bottleneck —
    the 50k corpus is on disk and unmeasured.

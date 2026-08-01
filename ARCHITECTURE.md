@@ -1,4 +1,4 @@
-# okf-brain — Architecture (current state)
+# touchstone — Architecture (current state)
 
 > **This is the map, not the ledger.** It describes the system *as it is today* and is
 > rewritten freely whenever the design shifts. For *why* a decision was made, read the
@@ -11,7 +11,7 @@
 > [DECISIONS.md](DECISIONS.md), [FINDINGS.md](FINDINGS.md), [PROTOTYPE.md](PROTOTYPE.md),
 > [VERSION-CONTROL.md](VERSION-CONTROL.md), [RUST-PATH.md](RUST-PATH.md).
 
-## What okf-brain is
+## What touchstone is
 
 A knowledge base — corporate brain or personal brain, one architecture — built on
 **Open Knowledge Format v0.2**, Google Cloud's open specification for representing
@@ -29,7 +29,7 @@ That property is verified, not asserted ([ADR-2608010910](docs/adrs/ADR-26080109
 capture  →  concept file (raw markdown, authoritative)
               ↓  (CRDT checkpoint — write path)
             bundle on disk
-              ↓  (brain index — idempotent, incremental on content hash)
+              ↓  (touchstone index — idempotent, incremental on content hash)
             derived plane:  index.md · FTS · edges · vectors
               ↓
 search   →  structured prefilter → BM25 (+vector) → 1-hop graph expansion → trust rank
@@ -64,7 +64,7 @@ okf-usecases/        compose ports. IndexBundle · SearchBundle · CaptureConcep
 
 okf-adapters/
   primary/
-    cli/             `brain` command surface
+    cli/             `touchstone` command surface
     mcp/             MCP tool surface (CLI-MCP parity, hex ADR-019)
   secondary/
     yaml-serde/      FrontmatterParser  ← serde_yaml_ng

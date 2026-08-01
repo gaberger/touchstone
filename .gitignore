@@ -1,4 +1,4 @@
-.brain/
+.touchstone/
 __pycache__/
 *.pyc
 _export*/
@@ -6,3 +6,5 @@ _export*/
 
 # Rust build artifacts
 target/
+_work-*/
+.claude/

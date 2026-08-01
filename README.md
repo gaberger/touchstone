@@ -1,4 +1,4 @@
-# OKF Second Brain
+# Touchstone
 
 **Provenance and portability for machine-written knowledge.**
 
@@ -51,7 +51,7 @@ python3 -m venv .venv && .venv/bin/pip install pyyaml
 ```
 
 ```bash
-.venv/bin/python tests/make_fixture.py _fixture && .venv/bin/python -m brain --bundle _fixture index
+.venv/bin/python tests/make_fixture.py _fixture && .venv/bin/python -m touchstone --bundle _fixture index
 ```
 
 Run the drills — T1 rebuild, T2 round-trip, T6 service-death:
@@ -64,13 +64,13 @@ Run the drills — T1 rebuild, T2 round-trip, T6 service-death:
 
 | Command | What it does |
 |---|---|
-| `brain new <Type> <Title>` | Scaffold a conformant concept. Emits frontmatter through a YAML dumper, never string concatenation |
-| `brain index` | Rebuild the derived index and every generated `index.md`. Idempotent, incremental on content hash |
-| `brain search <query>` | Structured prefilter → BM25 → one-hop graph expansion → trust rank |
-| `brain lint` | Conformance floor plus the duplicate checks E2 showed are actually needed |
-| `brain fmt [--check]` | Canonicalize frontmatter. **Refuses** files it cannot safely reproduce |
-| `brain export <dir>` | Write raw bytes back out. Byte-exact by construction |
-| `brain stats` | Concepts by type, trust tier, status; link and broken-link counts |
+| `touchstone new <Type> <Title>` | Scaffold a conformant concept. Emits frontmatter through a YAML dumper, never string concatenation |
+| `touchstone index` | Rebuild the derived index and every generated `index.md`. Idempotent, incremental on content hash |
+| `touchstone search <query>` | Structured prefilter → BM25 → one-hop graph expansion → trust rank |
+| `touchstone lint` | Conformance floor plus the duplicate checks E2 showed are actually needed |
+| `touchstone fmt [--check]` | Canonicalize frontmatter. **Refuses** files it cannot safely reproduce |
+| `touchstone export <dir>` | Write raw bytes back out. Byte-exact by construction |
+| `touchstone stats` | Concepts by type, trust tier, status; link and broken-link counts |
 
 Filters: `--type`, `--tag`, `--status`, `--trust`, `--limit`, `--no-expand`.
 
@@ -81,8 +81,8 @@ truth. `export` writes raw bytes, so there is no serializer in the write path th
 drop an unknown key — the failure mode is structurally impossible rather than merely
 tested for.
 
-**Everything above the bundle is derived and disposable.** Delete `.brain/` and every
-`index.md`, run `brain index`, and the result is byte-identical. T1 enforces this.
+**Everything above the bundle is derived and disposable.** Delete `.touchstone/` and every
+`index.md`, run `touchstone index`, and the result is byte-identical. T1 enforces this.
 
 **The spec's tolerance is honored, not narrowed.** Unknown `type` values, unknown
 frontmatter keys, and broken links are all preserved and indexed — the spec requires

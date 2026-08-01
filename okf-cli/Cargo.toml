@@ -4,6 +4,11 @@ name = "okf-cli"
 version.workspace = true
 edition.workspace = true
 
+# The product is Touchstone; the okf-* crates are named for the FORMAT they implement.
+[[bin]]
+name = "touchstone"
+path = "src/main.rs"
+
 [dependencies]
 okf-usecases = { path = "../okf-usecases" }
 okf-cli-adapter = { path = "../okf-adapters/primary/cli" }

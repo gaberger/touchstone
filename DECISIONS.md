@@ -174,7 +174,7 @@ the design:
 
 | # | Test | Falsifies |
 |---|---|---|
-| T1 | **Rebuild drill.** `rm -rf .brain/ && find . -name index.md -delete && brain index`. Every generated `index.md` byte-identical; a 500-query golden set returns identical ranked top-10. | The whole "derived and disposable" claim, if it fails |
+| T1 | **Rebuild drill.** `rm -rf .touchstone/ && find . -name index.md -delete && touchstone index`. Every generated `index.md` byte-identical; a 500-query golden set returns identical ranked top-10. | The whole "derived and disposable" claim, if it fails |
 | T2 | **Round-trip fidelity.** 1,000 adversarial concepts — unknown `type` values, custom keys, 3-entry `verified[]` chains, YAML anchors, multiline scalars, CRLF, unicode paths, 200 deliberately broken links. Ingest → export → `git diff --exit-code`. | Either design, at a single non-identical byte. The Archivist predicts a service-backed store loses unknown keys and broken links — both of which the spec requires be preserved |
 | T3 | **ACL-aware recall.** 200k concepts, 400 principals each entitled to 2–8%. Prefiltered ANN vs. ANN-then-filter, recall@10 against exact search. | The Operator's OPEN-5 win, if post-filter reaches ≥0.95× prefilter recall at equal p95 |
 | T4 | **Latency at corporate scale.** 200k concepts, 768-dim, hybrid + one-hop expansion, 50 QPS. Target p95 < 400ms, recall@10 ≥ 0.95. | The need for a service, if SQLite FTS5 + sqlite-vec on the bare bundle lands within 2× |

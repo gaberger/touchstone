@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import okf, render, store
 
-DB_REL = Path(".brain") / "index.db"
+DB_REL = Path(".touchstone") / "index.db"
 
 
 # ------------------------------------------------------------------ bundle io
@@ -24,7 +24,7 @@ DB_REL = Path(".brain") / "index.db"
 def find_bundle(start: Path) -> Path:
     p = start.resolve()
     for cand in [p, *p.parents]:
-        if (cand / "index.md").exists() or (cand / ".brain").exists():
+        if (cand / "index.md").exists() or (cand / ".touchstone").exists():
             return cand
     return p
 
@@ -264,7 +264,7 @@ def cmd_export(args) -> int:
         for fn in filenames:
             if fn in okf.RESERVED:
                 rel = (Path(dirpath) / fn).relative_to(root)
-                if ".brain" in rel.parts:
+                if ".touchstone" in rel.parts:
                     continue
                 d = out / rel
                 d.parent.mkdir(parents=True, exist_ok=True)
@@ -299,7 +299,7 @@ def cmd_stats(args) -> int:
 # ---------------------------------------------------------------------- main
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="brain", description="OKF second-brain prototype")
+    p = argparse.ArgumentParser(prog="touchstone", description="Touchstone -- provenance and portability for machine-written knowledge")
     p.add_argument("--bundle", default=".", help="bundle root (default: discover)")
     sub = p.add_subparsers(dest="cmd", required=True)
 

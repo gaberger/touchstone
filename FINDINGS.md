@@ -189,7 +189,7 @@ The general lesson is worth more than the fix: **"we just store markdown" does n
 
 ### E3b — the canonicalizing formatter is not the cheap CRDT substitute E2 claimed
 
-Run against the adversarial fixture, `brain fmt` did three unacceptable things:
+Run against the adversarial fixture, `touchstone fmt` did three unacceptable things:
 
 | Input | Naive formatter output | Damage |
 |---|---|---|
@@ -217,7 +217,7 @@ kind that makes retrieval quietly untrustworthy rather than visibly broken.
 
 The fixture generator produced invalid YAML on its first run: an unquoted `description`
 containing `: `. This is the single most likely authoring error in real use, it is invisible
-until parse time, and it is the reason `brain new` emits through a YAML dumper instead of
+until parse time, and it is the reason `touchstone new` emits through a YAML dumper instead of
 string concatenation. **`lint` catching it is not optional — it is the main event for R2.**
 
 ---
@@ -238,7 +238,7 @@ runbook at 02:00, which is a latency and presence problem. It is simply not need
 the files valid, which is what it was primarily justified by.
 
 **Revised build order:** the canonicalizing formatter and duplicate linter move into
-Stage 1 alongside `brain index`. The CRDT moves behind the adoption test — if A3 shows one
+Stage 1 alongside `touchstone index`. The CRDT moves behind the adoption test — if A3 shows one
 person barely writing into the brain, concurrent editing was never the bottleneck.
 
 ---
@@ -283,6 +283,26 @@ weak. Deciding it is deciding whether we honor the spec's tolerance or our readi
 
 **Verdict: A1 is falsified as stated. Either brain reconstructs index.md for concept-free directories,
 or A1 must be narrowed to directories that contain concepts.**
+
+### E4c — the harness was destroying its own evidence
+
+T1 is destructive by design: it deletes every `index.md` and the derived dir to prove the rebuild is
+byte-identical. Run in place, it consumes the corpus it is testing. The first E4 run deleted
+`acme_retail/attesters/index.md` — brain will not regenerate an index for a concept-free directory, which
+is E4b — and that had two consequences:
+
+1. Vendored third-party data was silently modified: six `index.md` files rewritten, one deleted.
+2. **The E4b failure is self-erasing.** Once the file is gone it is no longer missing, so a second run
+   reports T1 as passing. acme_retail went 6/10 → 7/10 between runs, and the evidence for the defect
+   disappeared with it. The bundles vendored in the first commit were already mutated, so E4b was not
+   reproducible from this repo until the fix.
+
+The drills now copy the bundle before touching it; the source is read-only as far as they are concerned.
+Verified: two consecutive runs of `acme_retail` both report 6/10 with T1 failing, and the bundle is
+byte-identical afterwards.
+
+**Worth generalizing: a destructive test that runs in place cannot be trusted the second time.** If the
+first run changes the input, a green second run means nothing.
 
 ### Not defects — the drills are not yet bundle-portable
 

@@ -71,7 +71,7 @@ REAL = [
     ("runbooks/rebuild-index.md", "Runbook", "Rebuild the index from scratch",
      "The T1 drill: delete everything derived, regenerate, diff.",
      ["ops"], "stable", "human",
-     "1. `rm -rf .brain/`\n2. `find . -name index.md -delete`\n3. `brain index`\n"
+     "1. `rm -rf .touchstone/`\n2. `find . -name index.md -delete`\n3. `touchstone index`\n"
      "4. `git diff --exit-code`\n\nAny diff falsifies the derivability claim."),
     ("metrics/concepts-per-day.md", "Metric", "Concepts created per day",
      "Split by whether the day involved active project work.",
