@@ -1,0 +1,5 @@
+.brain/
+__pycache__/
+*.pyc
+_export*/
+.venv/
