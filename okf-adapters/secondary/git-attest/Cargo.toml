@@ -6,3 +6,6 @@ edition.workspace = true
 
 [dependencies]
 okf-ports = { path = "../../../okf-ports" }
+
+[dev-dependencies]
+tempfile = "3"
