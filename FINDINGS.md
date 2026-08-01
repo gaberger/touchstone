@@ -312,6 +312,33 @@ they search for "index" and filter `type: Decision`, while upstream types are Bi
 Metric, Policy, Attested, Skill and Log. Making the drills bundle-portable is follow-up work; until
 then a non-fixture run reports three false failures.
 
+---
+
+## E5 — the Rust port against the Python oracle
+
+The Rust workspace reached a runnable `touchstone` binary: domain, ports, six use cases, four secondary
+adapters, the CLI adapter and the composition root. First differential run against the Python prototype.
+
+**Parity on `_fixture`** — both index 25 concepts; both export byte-exact, **0 round-trip differences**
+either side. A2 holds in both implementations.
+
+**Divergence on `_upstream/acme_retail`, exactly where predicted:**
+
+| | concepts indexed | `log.md` |
+|---|---|---|
+| Rust | **10 / 10** | indexed |
+| Python | 9 / 10 | **dropped** |
+
+E4a said `RESERVED = {"index.md", "log.md"}` narrows the spec in the way the design forbids. The Rust
+adapter does not reserve the filename, so a legitimate `type: Log` concept survives. **The port is
+correct where the oracle is wrong**, which is the outcome the differential exists to detect — a
+disagreement is only useful if you already know which side should win, and FINDINGS recorded that
+before the Rust existed.
+
+**Still outstanding before the Python prototype can be deleted:** `tests/drills.py` shells out to
+`python -m touchstone`, so T1/T2/T6 have never run against the Rust binary. Parity on index/export/stats
+is not parity on the drills.
+
 ## Still open
 
 - **Revocation** — unaddressed by any experiment, and the surviving argument for a
