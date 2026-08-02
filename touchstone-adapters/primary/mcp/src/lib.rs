@@ -34,7 +34,8 @@ use touchstone_ports::{
     SearchQuery, SearchVia, Trust,
 };
 use touchstone_usecases::{
-    capture_concept_logged, export_bundle, format_bundle, lint_bundle, reindex_bundle, CaptureRequest,
+    capture_concept_logged, export_bundle, format_bundle, lint_bundle, reindex_bundle,
+    verify_bundle, AttestStatus, CaptureRequest,
 };
 
 /// Everything the surface needs, chosen by the composition root.
@@ -44,6 +45,8 @@ use touchstone_usecases::{
 /// adapter set — and what stops it drifting from the CLI.
 pub struct Surface<F, P, I, C> {
     bundle: PathBuf,
+    /// Verification only. There is no signing path through this surface, by design.
+    vc: Box<dyn touchstone_ports::VersionControl + Send + Sync>,
     files: F,
     parser: P,
     index: Mutex<I>,
@@ -59,8 +62,15 @@ where
     I: BundleIndex + Send + 'static,
     C: Clock + Send + Sync + 'static,
 {
-    pub fn new(bundle: PathBuf, files: F, parser: P, index: I, clock: C) -> Self {
-        Self { bundle, files, parser, index: Mutex::new(index), clock }
+    pub fn new(
+        bundle: PathBuf,
+        files: F,
+        parser: P,
+        index: I,
+        clock: C,
+        vc: Box<dyn touchstone_ports::VersionControl + Send + Sync>,
+    ) -> Self {
+        Self { bundle, files, parser, index: Mutex::new(index), clock, vc }
     }
 
     // ── argument helpers ────────────────────────────────────────────────────
@@ -261,6 +271,29 @@ where
         ))
     }
 
+    fn t_verify(&self, vc: &dyn touchstone_ports::VersionControl) -> CallToolResult {
+        let r = verify_bundle(&self.files, &self.parser, vc);
+        let problems: Vec<Value> = r
+            .problems
+            .iter()
+            .map(|(p, s)| {
+                let kind = match s {
+                    AttestStatus::Unbacked => "unbacked",
+                    AttestStatus::Stale => "stale",
+                    AttestStatus::BadSignature => "bad_signature",
+                    _ => "ok",
+                };
+                json!({ "path": p, "status": kind })
+            })
+            .collect();
+        Self::ok(json!({
+            "checked": r.checked,
+            "backed": r.backed,
+            "clean": r.is_clean(),
+            "problems": problems,
+        }))
+    }
+
     fn t_stats(&self) -> CallToolResult {
         let Ok(index) = self.index.lock() else {
             return Self::fail("The index lock is poisoned.", "Restart the server.");
@@ -406,6 +439,7 @@ where
             "touchstone_search" => self.t_search(args),
             "touchstone_show" => self.t_show(args),
             "touchstone_stats" => self.t_stats(),
+            "touchstone_verify" => self.t_verify(self.vc.as_ref()),
             _ => return None,
         })
     }

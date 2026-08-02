@@ -116,14 +116,24 @@ Derived from the spec's own actor convention — no invention:
 in git it is meant to be a signed commit. This field is the only thing separating a curated
 brain from a pile of plausible text, and every ranking decision in retrieval depends on it.
 
-> **Enforced by nothing today.** The intended mechanism — signed commits, and CI rejecting
-> unsigned `verified` deltas — does not exist: there is no `.github/workflows`, and
-> `VersionControl::attest` has no caller, which is why `touchstone-git-attest` is listed
-> DEFERRED. What actually holds is weaker and narrower: `touchstone new` cannot emit a
-> `verified` key, so the tier survives *accident*. It does not survive an adversary, and it
-> does not survive `export` — raw bytes carry no signature, so a consumer of an exported
-> bundle cannot check a `verified` claim at all. That matters most for the case the format
-> is designed for: a bundle that has been shared.
+**Enforced by signature** (E12). `touchstone attest` signs a claim with an SSH key; the
+signature covers the concept's **content digest**, not its path, so editing a concept after
+signing invalidates the attestation rather than carrying it along. `touchstone verify` checks
+every `human:` claim and exits non-zero if any is unbacked, stale, or signed by a key the
+bundle does not list.
+
+The manifest and `allowed_signers` live at `attest/` — not dot-prefixed, so `export` carries
+them and a stranger who receives the bundle can check its claims. A signature that does not
+travel with the bytes it signs protects nobody.
+
+`attest` is **CLI-only, and it is the single deliberate hole in CLI–MCP parity.** Signing needs
+a private key a human holds; exposing it over MCP would hand a model the one capability the
+trust invariant forbids it. `touchstone_verify` exists for agents; `touchstone_attest` does not
+and will not.
+
+What this does *not* establish is who to trust — `allowed_signers` is the bundle's own
+assertion about its signers, not a PKI. What it does establish is that a claim cannot be added,
+or its content changed, without detection.
 
 ## The one seam: personal vs corporate
 

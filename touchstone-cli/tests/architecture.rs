@@ -204,14 +204,7 @@ fn rule_6_cli_is_the_only_crate_that_imports_adapters() {
 /// Adapters that are deliberately not on the execution path yet, each gated on a named
 /// untested assumption. Being listed here is a claim that the crate is a stub by decision,
 /// not by neglect -- so the list is short, and every entry cites its gate.
-const DEFERRED: [(&str, &str); 3] = [
-    (
-        "touchstone-git-attest",
-        "no command attests yet. Git is the attestation SINK (ADR-2608010930), written by the \
-         CRDT checkpoint on the write path -- and that path is itself gated on A7. The adapter \
-         is implemented and tested; it has no caller, which is the honest state rather than a \
-         reason to invent a `touchstone attest` command so this list can be shorter.",
-    ),
+const DEFERRED: [(&str, &str); 2] = [
     ("touchstone-crdt-sync", "A7 -- CRDT sync is unproven; git remains the write path (ADR-2608010930)"),
     ("touchstone-embed-local", "A4 -- hybrid retrieval is unmeasured; BM25 alone until it is"),
 ];

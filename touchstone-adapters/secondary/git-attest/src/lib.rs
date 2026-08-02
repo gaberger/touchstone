@@ -8,6 +8,7 @@ use std::path::Path;
 use std::process::Command;
 
 use touchstone_ports::VersionControl;
+use std::io::Write;
 
 pub struct GitAttest;
 
@@ -22,6 +23,28 @@ impl GitAttest {
     }
 }
 
+/// The SSH signature namespace. Fixed, so a signature made for touchstone cannot be replayed
+/// as a git commit signature or an SSH login, and vice versa.
+const NAMESPACE: &str = "touchstone";
+
+impl GitAttest {
+    /// Write `content` to a temp file and hand the path to `f`.
+    ///
+    /// `ssh-keygen -Y` reads the payload from a file or stdin and writes signatures to a
+    /// sibling `.sig`, so the temp file is not incidental -- it is the interface.
+    fn with_temp<T>(content: &str, f: impl FnOnce(&Path) -> Result<T, String>) -> Result<T, String> {
+        let dir = std::env::temp_dir().join(format!("touchstone-attest-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| format!("temp dir: {e}"))?;
+        let path = dir.join("payload");
+        std::fs::File::create(&path)
+            .and_then(|mut fh| fh.write_all(content.as_bytes()))
+            .map_err(|e| format!("temp file: {e}"))?;
+        let out = f(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+        out
+    }
+}
+
 impl VersionControl for GitAttest {
     /// Stage `path` and commit it as an attestation record.
     ///
@@ -31,6 +54,14 @@ impl VersionControl for GitAttest {
     ///
     /// Returns `Ok(())` without creating a commit when `path` has not changed
     /// since the last commit (idempotent -- the file is already attested).
+    fn sign(&self, payload: &str, key: &str) -> Result<String, String> {
+        Self::sign_impl(payload, key)
+    }
+
+    fn verify(&self, payload: &str, signature: &str, signer: &str, allowed_signers: &str) -> Result<bool, String> {
+        Self::verify_impl(payload, signature, signer, allowed_signers)
+    }
+
     fn attest(&self, path: &str) -> Result<(), String> {
         let p = Path::new(path);
 
@@ -205,5 +236,52 @@ mod tests {
         let result = adapter.attest(missing.to_str().unwrap());
 
         assert!(result.is_err(), "attesting a nonexistent file should fail");
+    }
+}
+
+// ── Signing ──────────────────────────────────────────────────────────────────
+
+impl GitAttest {
+    fn sign_impl(payload: &str, key: &str) -> Result<String, String> {
+        Self::with_temp(payload, |p| {
+            let out = Command::new("ssh-keygen")
+                .args(["-Y", "sign", "-f", key, "-n", NAMESPACE, p.to_str().unwrap_or("")])
+                .output()
+                .map_err(|e| format!("failed to spawn ssh-keygen: {e}"))?;
+            if !out.status.success() {
+                return Err(format!(
+                    "ssh-keygen sign failed: {}",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ));
+            }
+            std::fs::read_to_string(p.with_extension("sig"))
+                .map_err(|e| format!("signature not produced: {e}"))
+        })
+    }
+
+    fn verify_impl(payload: &str, signature: &str, signer: &str, allowed_signers: &str) -> Result<bool, String> {
+        Self::with_temp(payload, |p| {
+            let sig = p.with_extension("sig");
+            std::fs::write(&sig, signature).map_err(|e| format!("cannot stage signature: {e}"))?;
+            let allowed = p.with_extension("allowed");
+            std::fs::write(&allowed, allowed_signers)
+                .map_err(|e| format!("cannot stage allowed_signers: {e}"))?;
+            let allowed = allowed.to_str().unwrap_or("").to_string();
+            let out = Command::new("ssh-keygen")
+                .args([
+                    "-Y", "verify",
+                    "-f", &allowed,
+                    "-I", signer,
+                    "-n", NAMESPACE,
+                    "-s", sig.to_str().unwrap_or(""),
+                ])
+                .stdin(std::fs::File::open(p).map_err(|e| format!("cannot reopen payload: {e}"))?)
+                .output()
+                .map_err(|e| format!("failed to spawn ssh-keygen: {e}"))?;
+            // A failed verification is a RESULT, not an error: forged, tampered and
+            // not-an-allowed-signer are all "false", and the caller must not be able to tell
+            // them apart from a message. Only a broken toolchain is Err.
+            Ok(out.status.success())
+        })
     }
 }

@@ -4,7 +4,8 @@
 
 use touchstone_ports as ports;
 use touchstone_ports::{
-    CaptureEvent, Clock, Concept, ConceptParser, ConceptRepository, ConceptSink, EventLog,
+    Attestation, CaptureEvent, Clock, Concept, ConceptParser, ConceptRepository, ConceptSink,
+    EventLog, VersionControl,
     IndexPopulator, NewConceptRequest, ParsedConcept, RawStore, SearchHit, SearchQuery,
 };
 
@@ -1213,4 +1214,138 @@ where
         elapsed_ms: started.elapsed().as_millis() as u64,
     });
     Ok(path)
+}
+
+// ── Attestation ───────────────────────────────────────────────────────────────
+
+/// Where a bundle's attestations live, relative to its root.
+///
+/// Not dot-prefixed, deliberately: these are artifacts, so `export` carries them and a
+/// stranger who receives the bundle can check its claims. A signature that does not travel
+/// with the bytes it signs protects nobody.
+pub const MANIFEST_REL: &str = "attest/manifest.jsonl";
+/// SSH `allowed_signers` format. Travels with the bundle for the same reason.
+pub const SIGNERS_REL: &str = "attest/allowed_signers";
+
+/// One concept's standing after checking its `verified` claim against the manifest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AttestStatus {
+    /// Claims `human:` verification, and a valid signature covers the current bytes.
+    Backed,
+    /// Claims `human:` verification with no matching attestation at all.
+    Unbacked,
+    /// An attestation exists, but the concept has changed since it was signed. This is the
+    /// interesting failure: the claim and the signature are both real, and the bytes are not
+    /// the ones that were verified.
+    Stale,
+    /// Signature present and invalid — forged, corrupted, or signed by a key the bundle does
+    /// not list.
+    BadSignature,
+    /// Makes no `human:` claim, so there is nothing to back.
+    NotClaimed,
+}
+
+#[derive(Debug, Default)]
+pub struct VerifyReport {
+    pub checked: usize,
+    pub backed: usize,
+    pub problems: Vec<(String, AttestStatus)>,
+}
+
+impl VerifyReport {
+    /// True when every `human:` claim in the bundle is backed by a valid signature over the
+    /// current bytes.
+    pub fn is_clean(&self) -> bool {
+        self.problems.is_empty()
+    }
+}
+
+/// Parse the manifest. Malformed lines are skipped rather than fatal: a partially corrupt
+/// manifest must still let the intact attestations verify, or one bad line disarms the whole
+/// bundle.
+pub fn parse_manifest(text: &str) -> Vec<Attestation> {
+    let field = |line: &str, key: &str| -> String {
+        line.split(&format!("\"{key}\":\""))
+            .nth(1)
+            .and_then(|r| r.split('"').next())
+            .unwrap_or("")
+            .replace("\\n", "\n")
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\")
+    };
+    text.lines()
+        .filter(|l| l.contains("\"signature\""))
+        .map(|l| Attestation {
+            path: field(l, "path"),
+            digest: field(l, "digest"),
+            signer: field(l, "signer"),
+            at: field(l, "at"),
+            signature: field(l, "signature"),
+        })
+        .filter(|a| !a.path.is_empty() && !a.signature.is_empty())
+        .collect()
+}
+
+pub fn manifest_line(a: &Attestation) -> String {
+    let esc = |v: &str| v.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+    format!(
+        "{{\"path\":\"{}\",\"digest\":\"{}\",\"signer\":\"{}\",\"at\":\"{}\",\"signature\":\"{}\"}}\n",
+        esc(&a.path), esc(&a.digest), esc(&a.signer), esc(&a.at), esc(&a.signature)
+    )
+}
+
+/// Check every `human:` claim in the bundle against the manifest.
+///
+/// **This is the function the trust invariant was missing.** `verified[].by` starting with
+/// `human:` promotes a concept above machine-generated text in every ranking decision, and
+/// until now nothing checked that the claim was true. An agent could not write one by
+/// accident, but anyone who forked a bundle could add one by hand.
+pub fn verify_bundle<F, P, V>(files: &F, parser: &P, vc: &V) -> VerifyReport
+where
+    F: ConceptRepository + RawStore,
+    P: ConceptParser,
+    V: VersionControl + ?Sized,
+{
+    let manifest = files
+        .raw_bytes(MANIFEST_REL)
+        .map(|b| String::from_utf8_lossy(&b).to_string())
+        .map(|t| parse_manifest(&t))
+        .unwrap_or_default();
+    let signers = files
+        .raw_bytes(SIGNERS_REL)
+        .map(|b| String::from_utf8_lossy(&b).to_string());
+
+    let mut report = VerifyReport::default();
+    for path in &files.paths() {
+        let Some(raw) = files.raw_bytes(path) else { continue };
+        let parsed = parser.parse(path, &raw);
+
+        let claim = parsed
+            .verified_entries
+            .iter()
+            .filter_map(|e| e.by.clone())
+            .find(|by| by.starts_with("human:"));
+        let Some(signer) = claim else { continue };
+
+        report.checked += 1;
+        let digest = ports::fnv64(&raw);
+        let status = match manifest.iter().find(|a| a.path == *path && a.signer == signer) {
+            None => AttestStatus::Unbacked,
+            Some(a) if a.digest != digest => AttestStatus::Stale,
+            Some(_) if signers.is_none() => AttestStatus::BadSignature,
+            Some(a) => {
+                let payload = Attestation::payload(&a.path, &a.digest, &a.signer, &a.at);
+                match vc.verify(&payload, &a.signature, &a.signer, signers.as_deref().unwrap_or("")) {
+                    Ok(true) => AttestStatus::Backed,
+                    _ => AttestStatus::BadSignature,
+                }
+            }
+        };
+        if status == AttestStatus::Backed {
+            report.backed += 1;
+        } else {
+            report.problems.push((path.clone(), status));
+        }
+    }
+    report
 }

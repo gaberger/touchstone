@@ -39,6 +39,10 @@ pub enum Command {
     Show(ShowArgs),
     /// Serve the MCP tool surface (stdio by default).
     Mcp(McpArgs),
+    /// Check that this bundle's `verified` claims are backed by valid signatures.
+    Verify,
+    /// Sign a concept's existing `verified` claim. CLI only -- an agent may not attest.
+    Attest(AttestArgs),
 }
 
 #[derive(Args, Debug)]
@@ -84,6 +88,15 @@ pub struct NewArgs {
 pub struct FmtArgs {
     #[arg(long)]
     pub check: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct AttestArgs {
+    /// Bundle-relative concept path.
+    pub path: String,
+    /// Private key to sign with, e.g. ~/.ssh/id_ed25519.
+    #[arg(long, default_value = "~/.ssh/id_ed25519")]
+    pub key: String,
 }
 
 #[derive(Args, Debug)]

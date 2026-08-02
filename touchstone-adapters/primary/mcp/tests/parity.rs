@@ -24,7 +24,14 @@ use std::path::Path;
 ///
 /// `mcp` is the transport that *serves* the tool surface. A `touchstone_mcp` tool would mean
 /// the surface could start itself, which is not a capability — it is a recursion.
-const CLI_ONLY: &[&str] = &["mcp"];
+///
+/// `attest` is the important one, and it is the single deliberate hole in parity. An agent may
+/// never write `verified: {by: human:...}` — that invariant is the whole difference between a
+/// curated brain and a pile of plausible text. Exposing signing over MCP would hand a model
+/// exactly the capability the design forbids it, and would do so at the precise moment the
+/// signature started to mean something. Signing needs a private key a human holds; that is not
+/// an implementation detail, it is the mechanism.
+const CLI_ONLY: &[&str] = &["mcp", "attest"];
 
 /// MCP tools that intentionally have no CLI subcommand.
 ///
@@ -115,7 +122,7 @@ fn every_mcp_tool_has_a_cli_command() {
 fn the_exemption_lists_are_not_hiding_a_real_gap() {
     // An exemption list is one careless commit from becoming a place to bury divergence. Both
     // lists stay tiny, and every entry must name something that actually exists.
-    assert!(CLI_ONLY.len() + MCP_ONLY.len() <= 3, "too many parity exemptions -- justify them");
+    assert!(CLI_ONLY.len() + MCP_ONLY.len() <= 4, "too many parity exemptions -- justify them");
     let cli = cli_subcommands();
     for c in CLI_ONLY {
         assert!(cli.contains(*c), "CLI_ONLY lists `{c}`, which is not a CLI command");

@@ -39,6 +39,7 @@ pub fn run<F, P>(
     files: &F,
     parser: &P,
     clock: &dyn Clock,
+    vc: &dyn touchstone_ports::VersionControl,
     make_sink: &dyn Fn(&std::path::Path) -> Box<dyn ConceptSink>,
 ) -> i32
 where
@@ -57,5 +58,7 @@ where
         // Served by the composition root: it needs an async runtime and the full adapter set,
         // neither of which belongs in a command handler.
         Command::Mcp(_) => 0,
+        Command::Verify => cmd::verify::run(files, parser, vc),
+        Command::Attest(a) => cmd::attest::run(a, files, parser, vc, clock),
     }
 }
