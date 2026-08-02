@@ -97,6 +97,135 @@ TOUCHSTONE_BIN=/path/to/other/impl cargo test -p touchstone-conformance
 That is the property the differential used to provide, generalised: any implementation can be held
 to the same drills, not just the two that happened to exist.
 
+## A five-minute tour
+
+Every block below is real output, captured from a live run. Start with an empty directory.
+
+**Capture something.** Frontmatter is emitted through a YAML dumper, never string
+concatenation — hand-written frontmatter with a `:` inside a value is the most common
+authoring error there is.
+
+```console
+$ touchstone --bundle ~/brain new Note "Why files win" \
+    --description "Raw bytes outlive every tool that reads them." \
+    --tag design --generated capture/claude-opus-5
+notes/why-files-win.md
+```
+
+```yaml
+---
+id: fd43e3b93413
+type: Note
+title: Why files win
+description: Raw bytes outlive every tool that reads them.
+tags:
+- design
+status: draft
+generated:
+  by: capture/claude-opus-5
+  at: 2026-08-02T15:53:17Z
+---
+
+# Why files win
+```
+
+Note what is **not** there: no `verified`. An agent may not assert human verification, so
+`--generated` produces a `machine` concept and there is no flag that produces a `human` one.
+
+**Index it.** Idempotent, incremental on content hash.
+
+```console
+$ touchstone --bundle ~/brain index
+indexed 2 concepts (2 new, 0 changed, 0 removed)
+index.md files written: 3
+broken links: 0 (legal per spec -- not-yet-written knowledge)
+```
+
+Broken links are reported, never rejected — a link to a concept you have not written yet is
+knowledge about your own gaps.
+
+**Search returns paths, not chunks.** The agent reads whole files.
+
+```console
+$ touchstone --bundle ~/brain search "raw bytes" --limit 3
+~ notes/why-files-win.md
+    Why files win  [Note]
+    Raw bytes outlive every tool that reads them.
+
+* human-verified   ~ machine-generated
+```
+
+The `~` is the trust tier, and it is **derived, never authored**: `verified[].by` starting
+with `human:` outranks `generated` outranks neither. Ranking depends on it.
+
+**Everything above the bundle is disposable.** Delete the derived plane and rebuild:
+
+```console
+$ rm -rf ~/brain/.touchstone && find ~/brain -name index.md -delete
+$ touchstone --bundle ~/brain index -q && touchstone --bundle ~/brain stats
+concepts: 2
+```
+
+Byte-identical, and drill T1 asserts it on every run — against this fixture and four
+third-party bundles. (One recorded exception: see E4b below.)
+
+**Lint catches what actually goes wrong**, which is duplicates rather than schema violations:
+
+```console
+$ touchstone --bundle ~/brain lint
+notes/bad.md
+  - duplicate tags: a
+  - verified entry missing required `by`
+  - body contains [[wikilinks]] -- not OKF, will not resolve
+
+3 problem(s)
+$ echo $?
+1
+```
+
+**Leaving is a supported operation.** `export` copies raw bytes, so nothing can be dropped
+on the way out — there is no serializer in the write path to drop it:
+
+```console
+$ touchstone --bundle ~/brain export /tmp/leaving
+exported 2 concepts to /tmp/leaving
+```
+
+### Point an agent at it
+
+```console
+$ touchstone --bundle ~/brain mcp        # stdio; add --http 127.0.0.1:8765 for remote
+```
+
+```
+touchstone_discover    read-only
+touchstone_export      writes
+touchstone_fmt         writes
+touchstone_index       writes
+touchstone_lint        read-only
+touchstone_new         writes
+touchstone_search      read-only
+touchstone_show        read-only
+touchstone_stats       read-only
+```
+
+Every tool is annotated, so a client knows which calls need a human in the loop. An agent
+that knows nothing starts with `touchstone_discover` — one argument-free call returning the
+bundle's shape, the available filters, and the whole tool list.
+
+For Claude Code, add to `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "touchstone": {
+      "command": "touchstone",
+      "args": ["--bundle", "/absolute/path/to/brain", "mcp"]
+    }
+  }
+}
+```
+
 ## Commands
 
 | Command | What it does |
