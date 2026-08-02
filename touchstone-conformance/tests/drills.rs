@@ -18,15 +18,16 @@ use touchstone_conformance::*;
 /// If the failure changes shape, that is a regression. If it *stops happening*, that is also
 /// reported, because it means someone fixed a defect the record still calls open and FINDINGS
 /// is now lying. Silence in either direction is how a known-issues list rots into an ignore-list.
-const KNOWN_DEFECTS: &[(&str, &str, &str, &str)] = &[(
-    "T1 rebuild",
-    "acme_retail",
-    "attesters/index.md",
-    "E4b -- `attesters/` holds no concepts, so the index.md upstream ships for it cannot be \
-     regenerated. A1 (\"everything above the bundle is derived\") is falsified as stated: either \
-     index rebuilds concept-free directories, or A1 narrows to directories that contain concepts. \
-     Undecided -- see FINDINGS.md E4b.",
-)];
+const KNOWN_DEFECTS: &[(&str, &str, &str, &str)] = &[
+    // E4b was here, and is closed. Kept as a comment rather than deleted, because the empty
+    // list is the interesting state and it should be obvious that it was earned:
+    //
+    //   ("T1 rebuild", "acme_retail", "attesters/index.md", "E4b -- ...")
+    //
+    // Resolution: touchstone cannot generate an index for a directory holding no concepts, so
+    // that file was never derived and the drill had no business deleting it. A1 narrows to
+    // what touchstone generates. See Bundle::generated_index_files and FINDINGS E8.
+];
 
 fn known_defect(drill: &str, bundle: &str) -> Option<(&'static str, &'static str)> {
     KNOWN_DEFECTS
@@ -86,7 +87,7 @@ fn for_each_bundle(drill: &str, f: impl Fn(&Bundle) -> Result<String, String>) {
 fn t1_rebuild_is_byte_identical() {
     for_each_bundle("T1 rebuild", |b| {
         b.ok(&["index", "-q"]);
-        let before = b.index_files();
+        let before = b.generated_index_files();
         // Comparing two empty sets is a pass that asserts nothing. An implementation that
         // generates no index.md at all would otherwise sail through this drill.
         if before.is_empty() {
@@ -95,7 +96,7 @@ fn t1_rebuild_is_byte_identical() {
 
         b.destroy_derived();
         b.ok(&["index", "-q"]);
-        let after = b.index_files();
+        let after = b.generated_index_files();
 
         if before.keys().ne(after.keys()) {
             let lost: Vec<_> = before.keys().filter(|k| !after.contains_key(*k)).collect();
@@ -121,12 +122,12 @@ fn t1b_index_is_idempotent() {
         // implementation that does nothing at all looks perfectly idempotent.
         b.destroy_derived();
         b.ok(&["index", "-q"]);
-        let a = b.index_files();
+        let a = b.generated_index_files();
         if a.is_empty() {
             return Err("no index.md generated -- idempotence over nothing is not idempotence".into());
         }
         b.ok(&["index", "-q"]);
-        let c = b.index_files();
+        let c = b.generated_index_files();
         if a == c {
             Ok(format!("second run is a no-op ({} index.md unchanged)", a.len()))
         } else {
