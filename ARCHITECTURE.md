@@ -52,17 +52,17 @@ Per hex [ADR-001](https://github.com/gaberger/hex/blob/main/docs/adrs/ADR-001-he
 one agent = one adapter = one worktree = one merge unit.
 
 ```
-okf-domain/          pure. Concept model, conformance floor, trust-tier derivation,
+touchstone-domain/          pure. Concept model, conformance floor, trust-tier derivation,
                      link resolution, ranking policy, index.md rendering, lint rules.
                      Zero external crates. Survives a stack rewrite untouched.
 
-okf-ports/           traits only. FrontmatterParser · ConceptRepository · SearchIndex ·
+touchstone-ports/           traits only. FrontmatterParser · ConceptRepository · SearchIndex ·
                      VersionControl · SyncEngine · Embedder · Clock
 
-okf-usecases/        compose ports. IndexBundle · SearchBundle · CaptureConcept ·
+touchstone-usecases/        compose ports. IndexBundle · SearchBundle · CaptureConcept ·
                      LintBundle · ExportBundle · FormatBundle
 
-okf-adapters/
+touchstone-adapters/
   primary/
     cli/             `touchstone` command surface
     mcp/             MCP tool surface (CLI-MCP parity, hex ADR-019)
@@ -74,10 +74,10 @@ okf-adapters/
     crdt-sync/       SyncEngine         ← automerge or loro
     embed-local/     Embedder           ← fastembed (OPTIONAL — gated on A4)
 
-okf-cli/             composition root. The ONLY crate that imports adapters.
+touchstone-cli/             composition root. The ONLY crate that imports adapters.
 
-okf-conformance/     the drills, as a black-box gate over the `touchstone` BINARY.
-                     Names no okf-* crate at all (rule 7), so it can gate an
+touchstone-conformance/     the drills, as a black-box gate over the `touchstone` BINARY.
+                     Names no touchstone-* crate at all (rule 7), so it can gate an
                      implementation it did not compile: TOUCHSTONE_BIN=… cargo test.
 ```
 
@@ -162,19 +162,19 @@ not a bug fix. The gate prints it on every run.
 
 ## Hexagonal rules (enforced by `hex analyze .`)
 
-1. `okf-domain/` imports only `okf-domain/`.
-2. `okf-ports/` imports `okf-domain/` only, for value types.
-3. `okf-usecases/` imports `okf-domain/` + `okf-ports/` only.
-4. `adapters/primary/` and `adapters/secondary/` import `okf-ports/` only.
+1. `touchstone-domain/` imports only `touchstone-domain/`.
+2. `touchstone-ports/` imports `touchstone-domain/` only, for value types.
+3. `touchstone-usecases/` imports `touchstone-domain/` + `touchstone-ports/` only.
+4. `adapters/primary/` and `adapters/secondary/` import `touchstone-ports/` only.
 5. Adapters NEVER import other adapters.
-6. `okf-cli/` composition root is the ONLY file that imports adapters.
-7. `okf-conformance/` imports **no** internal crate — it drives the built binary.
+6. `touchstone-cli/` composition root is the ONLY file that imports adapters.
+7. `touchstone-conformance/` imports **no** internal crate — it drives the built binary.
 
 Rule 5 is what makes the parser swap, the git swap, and the CRDT addition independent
 merge units — three agents, three worktrees, no coordination.
 
 Rule 7 is what stops the conformance suite from grading its own homework. A suite that
-imported `okf-domain` could assert against the very code that produced the answer and would
+imported `touchstone-domain` could assert against the very code that produced the answer and would
 pass by construction; one that imported an adapter could only ever gate *this* build. Naming
 nothing internal is what lets the same drills be pointed at a future rewrite.
 
@@ -191,10 +191,10 @@ skips reports green while asserting nothing:
 
 ```bash
 cargo build --release --bin touchstone
-cargo test -p okf-conformance
+cargo test -p touchstone-conformance
 
 # ...or hold a different implementation to the same drills:
-TOUCHSTONE_BIN=/path/to/other/impl cargo test -p okf-conformance
+TOUCHSTONE_BIN=/path/to/other/impl cargo test -p touchstone-conformance
 ```
 
 The whole gate — build, tests, layering, conformance, byte-exact export over every bundle:

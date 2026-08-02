@@ -11,12 +11,12 @@ import { spawnSync } from "node:child_process";
  * Failure summaries carry the failing lines, because "the gate failed" in a notification is useless
  * at 3am and "acme_retail: index.md set changed" tells you what happened.
  */
-const REPO = process.env.TOUCHSTONE_REPO ?? "/Volumes/SSD/Development/okf";
+const REPO = process.env.TOUCHSTONE_REPO ?? "/Volumes/SSD/Development/touchstone";
 
 export default {
   name: "touchstone-verify",
   description:
-    "Run Touchstone's acceptance gate: build, tests, hex analyze, the okf-conformance drills " +
+    "Run Touchstone's acceptance gate: build, tests, hex analyze, the touchstone-conformance drills " +
     "across all bundles, and byte-exact export. Deterministic, no LLM.",
   match: (t) => /touchstone.*(verify|gate|check)|verify.*touchstone/i.test(t.spec.goal),
 

@@ -92,10 +92,10 @@ rather than narrowing them.
 
 | Phase | Description | Status | Verification |
 |-------|------------|--------|--------------|
-| P1 | Concept model, conformance floor, trust-tier derivation — pure domain | Pending | code:okf-domain/src/concept.rs, test:cargo test -p okf-domain |
-| P2 | Type vocabulary + `brain new` scaffolding via a YAML emitter, never string concatenation | Pending | code:okf-usecases/src/capture.rs, test:cargo test -p okf-usecases capture |
-| P3 | Tolerance rules: unknown types/keys preserved, broken links recorded | Pending | code:okf-domain/src/conformance.rs, test:cargo test -p okf-conformance tolerance |
-| P4 | Mount table for multi-bundle union | Pending | code:okf-adapters/secondary/fs-bundle/src/mounts.rs, test:cargo test -p fs-bundle mounts |
+| P1 | Concept model, conformance floor, trust-tier derivation — pure domain | Pending | code:touchstone-domain/src/concept.rs, test:cargo test -p touchstone-domain |
+| P2 | Type vocabulary + `brain new` scaffolding via a YAML emitter, never string concatenation | Pending | code:touchstone-usecases/src/capture.rs, test:cargo test -p touchstone-usecases capture |
+| P3 | Tolerance rules: unknown types/keys preserved, broken links recorded | Pending | code:touchstone-domain/src/conformance.rs, test:cargo test -p touchstone-conformance tolerance |
+| P4 | Mount table for multi-bundle union | Pending | code:touchstone-adapters/secondary/fs-bundle/src/mounts.rs, test:cargo test -p fs-bundle mounts |
 
 ## References
 

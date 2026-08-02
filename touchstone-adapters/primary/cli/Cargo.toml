@@ -1,0 +1,14 @@
+# Primary adapter -- cli.
+[package]
+name = "touchstone-cli-adapter"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+touchstone-ports = { path = "../../../touchstone-ports" }
+clap = { version = "4", features = ["derive"] }
+serde_yaml_ng = "0.10"
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

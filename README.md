@@ -16,7 +16,7 @@ topic reached ~100 articles and 400,000 words nobody typed.
 The architecture is right, and this project is the same shape. What the pattern leaves open
 is what happens once most of your knowledge base is machine-written:
 
-| the pattern | what is missing | what okf adds |
+| the pattern | what is missing | what Touchstone adds |
 |---|---|---|
 | `raw/` is authoritative | — | same rule: raw bytes are truth, frontmatter is a query view |
 | `wiki/` is regenerable | — | A1, enforced by the T1 drill |
@@ -48,21 +48,21 @@ tested; the two highest-risk assumptions are not yet answered.
 
 **Touchstone is a Rust project, and now only a Rust project.** The implementation lives in a
 13-crate hexagonal workspace whose layering is enforced by Cargo itself — a boundary violation is a
-compile error, not a lint (`okf-cli/tests/architecture.rs` guards the dependency graph that makes
+compile error, not a lint (`touchstone-cli/tests/architecture.rs` guards the dependency graph that makes
 that true).
 
 | layer | crate | state |
 |---|---|---|
-| domain | `okf-domain` | types only, zero dependencies |
-| ports | `okf-ports` | 7 traits |
-| use cases | `okf-usecases` | **done** |
-| adapters | `okf-yaml-serde` FrontmatterParser | **done** — temporal values stay ISO 8601 strings (E3a) |
-| | `okf-fs-bundle` ConceptRepository | **done** — `log.md` is a concept, not a reserved name (E4a) |
-| | `okf-sqlite-index` SearchIndex | **done** — FTS5 + structured prefilter |
-| | `okf-git-attest` VersionControl | **done** |
+| domain | `touchstone-domain` | types only, zero dependencies |
+| ports | `touchstone-ports` | 7 traits |
+| use cases | `touchstone-usecases` | **done** |
+| adapters | `touchstone-yaml-serde` FrontmatterParser | **done** — temporal values stay ISO 8601 strings (E3a) |
+| | `touchstone-fs-bundle` ConceptRepository | **done** — `log.md` is a concept, not a reserved name (E4a) |
+| | `touchstone-sqlite-index` SearchIndex | **done** — FTS5 + structured prefilter |
+| | `touchstone-git-attest` VersionControl | **done** |
 | | `crdt-sync`, `embed-local` | deferred — gated on A7 and A4, untested assumptions |
-| composition | `okf-cli` | **done** — full command surface |
-| conformance | `okf-conformance` | **done** — the drills, as a black-box gate |
+| composition | `touchstone-cli` | **done** — full command surface |
+| conformance | `touchstone-conformance` | **done** — the drills, as a black-box gate |
 
 ```bash
 cargo build --release --bin touchstone   # the conformance suite drives this binary
@@ -81,16 +81,16 @@ What the oracle was for did not go away, so it was moved rather than dropped:
 
 | the oracle provided | now provided by |
 |---|---|
-| the ten drills | `okf-conformance`, driving the binary as a black box |
+| the ten drills | `touchstone-conformance`, driving the binary as a black box |
 | a second opinion on ambiguous bytes | the drills assert the property directly instead of by comparison |
-| E4a (`log.md` is a concept) | an assertion in `okf-conformance/tests/fixture.rs` |
-| E4b (A1 fails on concept-free dirs) | a recorded known-defect in `okf-conformance/tests/drills.rs` |
+| E4a (`log.md` is a concept) | an assertion in `touchstone-conformance/tests/fixture.rs` |
+| E4b (A1 fails on concept-free dirs) | a recorded known-defect in `touchstone-conformance/tests/drills.rs` |
 
-Because the suite names no `okf-*` crate — a rule the architecture test enforces — it can gate an
+Because the suite names no `touchstone-*` crate — a rule the architecture test enforces — it can gate an
 implementation it did not compile:
 
 ```bash
-TOUCHSTONE_BIN=/path/to/other/impl cargo test -p okf-conformance
+TOUCHSTONE_BIN=/path/to/other/impl cargo test -p touchstone-conformance
 ```
 
 That is the property the differential used to provide, generalised: any implementation can be held

@@ -1,0 +1,15 @@
+# The conformance suite.
+#
+# NOTE THE ABSENCE OF ANY `touchstone-*` DEPENDENCY. That is the point, not an oversight: a suite that
+# imports the implementation can only ever test that implementation. This one drives the
+# `touchstone` BINARY as a black box, so the same suite gates the Rust build, a future rewrite,
+# or the upstream `reference_agent` (ADR-2608010950). `touchstone-cli/tests/architecture.rs` rule 7
+# keeps it that way. External crates are invisible to the layer model, as for any adapter.
+[package]
+name = "touchstone-conformance"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde_json = "1"
+tempfile = "3"

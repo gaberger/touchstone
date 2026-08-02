@@ -1,0 +1,24 @@
+# Composition root -- the ONLY crate allowed to import adapters (rule 6).
+[package]
+name = "touchstone-cli"
+version.workspace = true
+edition.workspace = true
+
+# The crate is `touchstone-cli`; the shipped binary is plain `touchstone`.
+[[bin]]
+name = "touchstone"
+path = "src/main.rs"
+
+[dependencies]
+touchstone-ports = { path = "../touchstone-ports" }
+touchstone-usecases = { path = "../touchstone-usecases" }
+clap = { version = "4", features = ["derive"] }
+touchstone-cli-adapter = { path = "../touchstone-adapters/primary/cli" }
+touchstone-mcp-adapter = { path = "../touchstone-adapters/primary/mcp" }
+touchstone-yaml-serde = { path = "../touchstone-adapters/secondary/yaml-serde" }
+touchstone-fs-bundle = { path = "../touchstone-adapters/secondary/fs-bundle" }
+touchstone-sqlite-index = { path = "../touchstone-adapters/secondary/sqlite-index" }
+touchstone-git-attest = { path = "../touchstone-adapters/secondary/git-attest" }
+touchstone-crdt-sync = { path = "../touchstone-adapters/secondary/crdt-sync" }
+touchstone-embed-local = { path = "../touchstone-adapters/secondary/embed-local" }
+rusqlite = { version = "0.40", features = ["bundled"] }

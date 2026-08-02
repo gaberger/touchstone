@@ -40,7 +40,7 @@ is really OKF and not a lookalike.
 We will promote the drills to a **language-independent conformance suite** — a fixture
 bundle plus expected outputs — and require every implementation to pass it.
 
-- **`okf-conformance` is its own crate**, depending on ports only, so it can be run against
+- **`touchstone-conformance` is its own crate**, depending on ports only, so it can be run against
   any adapter set.
 - **The fixture bundle is data, not code**: a checked-in OKF bundle plus expected
   `index.md` outputs and a golden query set. Any language can consume it.
@@ -83,20 +83,20 @@ bundle plus expected outputs — and require every implementation to pass it.
 
 | Phase | Description | Status | Verification |
 |-------|------------|--------|--------------|
-| P1 | The fixture bundle is language-neutral checked-in data, not a generator | Completed | code:_fixture/, test:cargo test -p okf-conformance --test fixture the_adversarial_corpus_is_actually_present |
-| P2 | `okf-conformance` crate; T1, T1b, T6 | Completed | code:okf-conformance/tests/drills.rs, test:cargo test -p okf-conformance --test drills |
-| P3 | T2a–T2e | Completed | code:okf-conformance/tests/drills.rs, test:cargo test -p okf-conformance --test drills |
-| P4 | Declared-divergence table per parser adapter (merge keys, comments, anchors) | Pending | code:okf-conformance/tests/parser_contract.rs, test:cargo test -p okf-conformance parser_contract |
-| P5 | Run every drill against the upstream sample bundles, not just T2 | Completed | code:okf-conformance/src/lib.rs all_bundles(), test:cargo test -p okf-conformance |
-| P6 | T6 via the upstream `reference_agent` CLI | Pending — unblocked | test:TOUCHSTONE_BIN=<reference_agent> cargo test -p okf-conformance |
+| P1 | The fixture bundle is language-neutral checked-in data, not a generator | Completed | code:_fixture/, test:cargo test -p touchstone-conformance --test fixture the_adversarial_corpus_is_actually_present |
+| P2 | `touchstone-conformance` crate; T1, T1b, T6 | Completed | code:touchstone-conformance/tests/drills.rs, test:cargo test -p touchstone-conformance --test drills |
+| P3 | T2a–T2e | Completed | code:touchstone-conformance/tests/drills.rs, test:cargo test -p touchstone-conformance --test drills |
+| P4 | Declared-divergence table per parser adapter (merge keys, comments, anchors) | Pending | code:touchstone-conformance/tests/parser_contract.rs, test:cargo test -p touchstone-conformance parser_contract |
+| P5 | Run every drill against the upstream sample bundles, not just T2 | Completed | code:touchstone-conformance/src/lib.rs all_bundles(), test:cargo test -p touchstone-conformance |
+| P6 | T6 via the upstream `reference_agent` CLI | Pending — unblocked | test:TOUCHSTONE_BIN=<reference_agent> cargo test -p touchstone-conformance |
 | P7 | CI gate on every push | Pending | code:.github/workflows/conformance.yml, test:bash tests/verify.sh |
 
 **Deviations from the decision as written, and why.**
 
-*"`okf-conformance` is its own crate, depending on ports only."* It depends on **nothing**
+*"`touchstone-conformance` is its own crate, depending on ports only."* It depends on **nothing**
 internal — not even ports. Depending on ports would mean the suite links the same value types the
 implementation uses, so a shared misreading could not be detected, and it could only ever gate a
-Rust build. Driving the binary instead makes `TOUCHSTONE_BIN=… cargo test -p okf-conformance` hold
+Rust build. Driving the binary instead makes `TOUCHSTONE_BIN=… cargo test -p touchstone-conformance` hold
 *any* implementation to the drills, which is what P6 needs and what the decision was reaching for.
 Enforced as architecture rule 7.
 

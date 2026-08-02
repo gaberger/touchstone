@@ -82,11 +82,11 @@ derived, disposable, and reconstructible by one idempotent command.
 
 | Phase | Description | Status | Verification |
 |-------|------------|--------|--------------|
-| P1 | `ConceptRepository` port + fs adapter; raw bytes preserved end to end | Pending | code:okf-adapters/secondary/fs-bundle/src/lib.rs, test:cargo test -p fs-bundle roundtrip |
-| P2 | `SearchIndex` port + sqlite adapter (FTS5, edges), incremental on content hash | Pending | code:okf-adapters/secondary/sqlite-index/src/lib.rs, test:cargo test -p sqlite-index incremental |
-| P3 | Deterministic `index.md` rendering — pure domain function | Pending | code:okf-domain/src/render.rs, test:cargo test -p okf-domain render_deterministic |
-| P4 | T1 rebuild drill + T6 service-death drill as CI gates | Pending | code:okf-conformance/tests/rebuild.rs, test:cargo test -p okf-conformance rebuild |
-| P5 | `.gitattributes` merge driver regenerating `index.md` from the merged tree | Pending | code:.gitattributes, test:cargo test -p okf-conformance merge_driver |
+| P1 | `ConceptRepository` port + fs adapter; raw bytes preserved end to end | Pending | code:touchstone-adapters/secondary/fs-bundle/src/lib.rs, test:cargo test -p fs-bundle roundtrip |
+| P2 | `SearchIndex` port + sqlite adapter (FTS5, edges), incremental on content hash | Pending | code:touchstone-adapters/secondary/sqlite-index/src/lib.rs, test:cargo test -p sqlite-index incremental |
+| P3 | Deterministic `index.md` rendering — pure domain function | Pending | code:touchstone-domain/src/render.rs, test:cargo test -p touchstone-domain render_deterministic |
+| P4 | T1 rebuild drill + T6 service-death drill as CI gates | Pending | code:touchstone-conformance/tests/rebuild.rs, test:cargo test -p touchstone-conformance rebuild |
+| P5 | `.gitattributes` merge driver regenerating `index.md` from the merged tree | Pending | code:.gitattributes, test:cargo test -p touchstone-conformance merge_driver |
 
 ## References
 

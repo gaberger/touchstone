@@ -278,115 +278,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "okf-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "okf-cli-adapter",
- "okf-crdt-sync",
- "okf-embed-local",
- "okf-fs-bundle",
- "okf-git-attest",
- "okf-mcp-adapter",
- "okf-ports",
- "okf-sqlite-index",
- "okf-usecases",
- "okf-yaml-serde",
- "rusqlite",
-]
-
-[[package]]
-name = "okf-cli-adapter"
-version = "0.1.0"
-dependencies = [
- "clap",
- "okf-ports",
- "serde_json",
- "serde_yaml_ng",
- "tempfile",
-]
-
-[[package]]
-name = "okf-conformance"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "okf-crdt-sync"
-version = "0.1.0"
-dependencies = [
- "okf-ports",
-]
-
-[[package]]
-name = "okf-domain"
-version = "0.1.0"
-
-[[package]]
-name = "okf-embed-local"
-version = "0.1.0"
-dependencies = [
- "okf-ports",
-]
-
-[[package]]
-name = "okf-fs-bundle"
-version = "0.1.0"
-dependencies = [
- "okf-ports",
-]
-
-[[package]]
-name = "okf-git-attest"
-version = "0.1.0"
-dependencies = [
- "okf-ports",
- "tempfile",
-]
-
-[[package]]
-name = "okf-mcp-adapter"
-version = "0.1.0"
-dependencies = [
- "okf-ports",
-]
-
-[[package]]
-name = "okf-ports"
-version = "0.1.0"
-dependencies = [
- "okf-domain",
-]
-
-[[package]]
-name = "okf-sqlite-index"
-version = "0.1.0"
-dependencies = [
- "okf-ports",
- "rusqlite",
-]
-
-[[package]]
-name = "okf-usecases"
-version = "0.1.0"
-dependencies = [
- "okf-domain",
- "okf-ports",
-]
-
-[[package]]
-name = "okf-yaml-serde"
-version = "0.1.0"
-dependencies = [
- "okf-ports",
- "serde_json",
- "serde_yaml_ng",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -616,6 +507,115 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.3",
+]
+
+[[package]]
+name = "touchstone-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "rusqlite",
+ "touchstone-cli-adapter",
+ "touchstone-crdt-sync",
+ "touchstone-embed-local",
+ "touchstone-fs-bundle",
+ "touchstone-git-attest",
+ "touchstone-mcp-adapter",
+ "touchstone-ports",
+ "touchstone-sqlite-index",
+ "touchstone-usecases",
+ "touchstone-yaml-serde",
+]
+
+[[package]]
+name = "touchstone-cli-adapter"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "serde_json",
+ "serde_yaml_ng",
+ "tempfile",
+ "touchstone-ports",
+]
+
+[[package]]
+name = "touchstone-conformance"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "touchstone-crdt-sync"
+version = "0.1.0"
+dependencies = [
+ "touchstone-ports",
+]
+
+[[package]]
+name = "touchstone-domain"
+version = "0.1.0"
+
+[[package]]
+name = "touchstone-embed-local"
+version = "0.1.0"
+dependencies = [
+ "touchstone-ports",
+]
+
+[[package]]
+name = "touchstone-fs-bundle"
+version = "0.1.0"
+dependencies = [
+ "touchstone-ports",
+]
+
+[[package]]
+name = "touchstone-git-attest"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "touchstone-ports",
+]
+
+[[package]]
+name = "touchstone-mcp-adapter"
+version = "0.1.0"
+dependencies = [
+ "touchstone-ports",
+]
+
+[[package]]
+name = "touchstone-ports"
+version = "0.1.0"
+dependencies = [
+ "touchstone-domain",
+]
+
+[[package]]
+name = "touchstone-sqlite-index"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "touchstone-ports",
+]
+
+[[package]]
+name = "touchstone-usecases"
+version = "0.1.0"
+dependencies = [
+ "touchstone-domain",
+ "touchstone-ports",
+]
+
+[[package]]
+name = "touchstone-yaml-serde"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "serde_yaml_ng",
+ "touchstone-ports",
 ]
 
 [[package]]

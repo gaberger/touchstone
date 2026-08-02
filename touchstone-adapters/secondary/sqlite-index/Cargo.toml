@@ -1,0 +1,9 @@
+# Secondary adapter for SearchIndex. Ports only.
+[package]
+name = "touchstone-sqlite-index"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+touchstone-ports = { path = "../../../touchstone-ports" }
+rusqlite = { version = "0.40", features = ["bundled"] }

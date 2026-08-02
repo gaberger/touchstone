@@ -376,10 +376,10 @@ worth recording, because the oracle was carrying four distinct things and only o
 
 | what the oracle carried | where it went |
 |---|---|
-| the ten drills | `okf-conformance`, driving the binary as a black box |
+| the ten drills | `touchstone-conformance`, driving the binary as a black box |
 | a second opinion on ambiguous bytes | gone, deliberately — see below |
-| E4a (`log.md` is a concept, not a reserved name) | an assertion, `okf-conformance/tests/fixture.rs` |
-| E4b (A1 fails on concept-free directories) | a recorded known-defect, `okf-conformance/tests/drills.rs` |
+| E4a (`log.md` is a concept, not a reserved name) | an assertion, `touchstone-conformance/tests/fixture.rs` |
+| E4b (A1 fails on concept-free directories) | a recorded known-defect, `touchstone-conformance/tests/drills.rs` |
 
 **The second opinion is the real loss, and it is worth being honest about it.** A differential test
 answers "do two independent readings of these bytes agree?", which is a question no single
@@ -388,8 +388,8 @@ drills now assert each property *directly* rather than by comparison, so they st
 regression, but they can no longer surface a disagreement nobody thought to look for. E3a and E4a
 were both found that way. Nothing in the current suite would have found them.
 
-What partially compensates: `okf-conformance` names no `okf-*` crate — enforced as architecture rule
-7 — so it drives the binary rather than the library. `TOUCHSTONE_BIN=… cargo test -p okf-conformance`
+What partially compensates: `touchstone-conformance` names no `touchstone-*` crate — enforced as architecture rule
+7 — so it drives the binary rather than the library. `TOUCHSTONE_BIN=… cargo test -p touchstone-conformance`
 holds *any* implementation to the same drills. The differential could compare two implementations;
 this can gate arbitrarily many, including ones that do not exist yet. That is a fair trade for a
 project whose stated asset is the format rather than the code, but it is a trade, not a free win.
@@ -403,7 +403,7 @@ fixing it means deciding what `index.md` should contain for a directory holding 
 reading of the spec, not a bug fix, and one nobody has made yet.
 
 **One thing the port did not carry over, noticed while writing the trust drill:** `Trust::Attested`
-exists in `okf-domain` and is never derived by anything. Both implementations only ever produced
+exists in `touchstone-domain` and is never derived by anything. Both implementations only ever produced
 `human` / `machine` / `unattributed`, so this is not a port defect — it is a documented tier
 (`verified` > `attested` > `generated`) with no derivation rule behind it. Left alone; recorded here
 because a trust tier that cannot be reached is either dead code or a missing rule, and which one it
