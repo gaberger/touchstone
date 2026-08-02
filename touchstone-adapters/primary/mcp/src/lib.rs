@@ -34,8 +34,8 @@ use touchstone_ports::{
     SearchQuery, SearchVia, Trust,
 };
 use touchstone_usecases::{
-    capture_concept_logged, export_bundle, format_bundle, lint_bundle, reindex_bundle,
-    verify_bundle, AttestStatus, CaptureRequest,
+    capture_concept_logged, export_bundle, format_bundle, ingest_raw, lint_bundle, reindex_bundle,
+    unprocessed_raw, verify_bundle, AttestStatus, CaptureRequest,
 };
 
 /// Everything the surface needs, chosen by the composition root.
@@ -294,6 +294,32 @@ where
         }))
     }
 
+    fn t_ingest(&self, args: &Map<String, Value>) -> CallToolResult {
+        let (Some(name), Some(content)) =
+            (Self::str_arg(args, "name"), Self::str_arg(args, "content"))
+        else {
+            return Self::fail(
+                "`name` and `content` are both required.",
+                "e.g. {\"name\": \"interview.txt\", \"content\": \"...\"}",
+            );
+        };
+        let report = ingest_raw(&[(name, content.into_bytes())], &self.files, &self.files);
+        Self::ok(json!({
+            "ingested": report.ingested,
+            "skipped": report.skipped.iter().map(|(p, w)| json!({ "path": p, "reason": w })).collect::<Vec<_>>(),
+        }))
+    }
+
+    fn t_unprocessed(&self, args: &Map<String, Value>) -> CallToolResult {
+        let pending = unprocessed_raw(&self.files, &self.parser);
+        let limit = Self::limit_arg(args);
+        Self::ok(json!({
+            "total": self.files.raw_paths().len(),
+            "uncited": pending.len(),
+            "documents": pending.iter().take(limit).collect::<Vec<_>>(),
+        }))
+    }
+
     fn t_stats(&self) -> CallToolResult {
         let Ok(index) = self.index.lock() else {
             return Self::fail("The index lock is poisoned.", "Restart the server.");
@@ -434,6 +460,8 @@ where
             "touchstone_export" => self.t_export(args, &self.files),
             "touchstone_fmt" => self.t_fmt(args),
             "touchstone_index" => self.t_index(),
+            "touchstone_ingest" => self.t_ingest(args),
+            "touchstone_unprocessed" => self.t_unprocessed(args),
             "touchstone_lint" => self.t_lint(args),
             "touchstone_new" => self.t_new(args),
             "touchstone_search" => self.t_search(args),

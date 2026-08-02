@@ -31,7 +31,18 @@ pub trait FrontmatterParser { fn parse(&self, raw: &[u8]) -> Result<Concept, Str
 pub trait ConceptRepository {
     fn paths(&self) -> Vec<String>;
 
-    /// Bundle-relative paths of every file that is NOT a concept and NOT derived state:
+    /// Bundle-relative paths of every file under `raw/` — the immutable source layer.
+    ///
+    /// Raw documents are the material concepts are *compiled from*: PDFs, transcripts, exports,
+    /// pasted articles. They are never concepts themselves, whatever their extension, and
+    /// nothing in the system rewrites them. A concept earns its provenance by citing one in
+    /// `sources[].resource`.
+    ///
+    /// This is the layer the design always assumed and never had. Without it a bundle can only
+    /// hold knowledge somebody already wrote in OKF, which is nobody's starting position.
+    fn raw_paths(&self) -> Vec<String>;
+
+    /// Bundle-relative paths of every file that is NOT a concept, NOT raw, and NOT derived:
     /// images, PDFs, recordings, scripts — the artifacts concepts point at via `resource:`.
     ///
     /// Deliberately not defaulted. A default returning empty would let an implementer forget

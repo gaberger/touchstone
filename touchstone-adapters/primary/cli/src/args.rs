@@ -41,6 +41,10 @@ pub enum Command {
     Mcp(McpArgs),
     /// Check that this bundle's `verified` claims are backed by valid signatures.
     Verify,
+    /// Copy source documents into the immutable `raw/` layer.
+    Ingest(IngestArgs),
+    /// List raw documents no concept cites yet.
+    Unprocessed,
     /// Sign a concept's existing `verified` claim. CLI only -- an agent may not attest.
     Attest(AttestArgs),
 }
@@ -88,6 +92,13 @@ pub struct NewArgs {
 pub struct FmtArgs {
     #[arg(long)]
     pub check: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct IngestArgs {
+    /// Source documents to ingest. Copied verbatim; never parsed or converted.
+    #[arg(required = true)]
+    pub files: Vec<String>,
 }
 
 #[derive(Args, Debug)]

@@ -245,10 +245,42 @@ For Claude Code, add to `.mcp.json`:
 | `touchstone stats` | Concepts by type, trust tier, status; link and broken-link counts |
 | `touchstone show <path>` | One concept's derived view. `--json` emits parsed frontmatter verbatim |
 | `touchstone mcp [--http ADDR]` | Serve the MCP tool surface. stdio by default; Streamable HTTP on request |
+| `touchstone ingest <file>...` | Copy source documents into the immutable `raw/` layer, byte-exact |
+| `touchstone unprocessed` | Raw documents no concept cites yet — the work queue |
 | `touchstone attest <path>` | Sign a concept's existing `verified` claim. **CLI only** — agents may not attest |
 | `touchstone verify` | Check every `human:` claim against the signed manifest. Non-zero if any fails |
 
 Filters: `--type`, `--tag`, `--status`, `--trust`, `--limit`, `--no-expand`.
+
+## The pipeline
+
+```
+raw/          source documents, immutable, never parsed on the way in
+  ↓           an agent reads them and writes concepts that CITE them
+concepts      derived knowledge, each `sources:` entry naming what it was compiled from
+  ↓           a human signs the ones they have actually checked
+attest/       signatures over content digests, travelling with the bundle
+```
+
+```console
+$ touchstone ingest ~/Downloads/interview.txt
+ingested raw/interview.txt
+
+$ touchstone unprocessed
+raw/interview.txt
+
+1 of 1 raw documents uncited
+Compile them into concepts that cite them in `sources`, then they leave this list.
+```
+
+The work queue is **derived, not tracked**: a raw document is processed exactly when some
+concept cites it. No state file, nothing to fall out of sync, and deleting the derived plane
+changes nothing — the same rule the index follows.
+
+Raw sources travel with `export`, because a concept citing `raw/interview.txt` in a bundle that
+does not carry it has a provenance chain with a hole in it. And `lint` flags a machine-written
+concept that cites nothing: the tier already says `machine`, and without a source there is no
+way to check what the machine read.
 
 ## For agents: the MCP surface
 
