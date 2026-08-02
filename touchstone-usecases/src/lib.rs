@@ -4,7 +4,7 @@
 
 use touchstone_ports as ports;
 use touchstone_ports::{
-    Clock, Concept, ConceptParser, ConceptRepository, ConceptSink, FilteredSearch,
+    Clock, Concept, ConceptParser, ConceptRepository, ConceptSink,
     IndexPopulator, NewConceptRequest, ParsedConcept, RawStore, SearchHit, SearchQuery,
 };
 
@@ -116,22 +116,6 @@ where
         }
     }
     stats
-}
-
-// ── SearchBundle ──────────────────────────────────────────────────────────────
-
-/// Result of `search_bundle_full`.
-#[derive(Debug, Default)]
-pub struct SearchResult {
-    pub hits: Vec<SearchHit>,
-}
-
-/// Structured prefilter → index query → ranked hits.
-///
-/// Graph expansion and trust-rank are delegated to `idx` (the FilteredSearch adapter),
-/// matching the ARCHITECTURE.md retrieval pipeline.
-pub fn search_bundle_full<S: FilteredSearch>(idx: &S, query: &SearchQuery) -> SearchResult {
-    SearchResult { hits: idx.search_filtered(query) }
 }
 
 // ── ExportBundle ──────────────────────────────────────────────────────────────
@@ -415,7 +399,7 @@ where
 mod tests {
     use super::*;
     use touchstone_ports::{
-        Concept, ConceptParser, ConceptRepository, ConceptSink, FilteredSearch, IndexPopulator,
+        Concept, ConceptParser, ConceptRepository, ConceptSink, IndexPopulator,
         NewConceptRequest, ParsedConcept, RawStore, SearchHit, SearchQuery, SearchVia, Trust,
         VerifiedEntry,
     };
@@ -560,21 +544,6 @@ mod tests {
         fn exists(&self, path: &str) -> bool { self.files.borrow().contains_key(path) }
     }
 
-    /// In-memory filtered search with optional type prefilter.
-    struct FakeSearch { hits: Vec<SearchHit> }
-
-    impl FilteredSearch for FakeSearch {
-        fn search_filtered(&self, q: &SearchQuery) -> Vec<SearchHit> {
-            let limit = if q.limit == 0 { 10 } else { q.limit };
-            self.hits.iter()
-                .filter(|h| q.concept_type.as_deref()
-                    .map(|t| h.concept_type == t).unwrap_or(true))
-                .take(limit)
-                .cloned()
-                .collect()
-        }
-    }
-
     struct FakeClock(String);
     impl Clock for FakeClock { fn now_iso8601(&self) -> String { self.0.clone() } }
 
@@ -656,67 +625,6 @@ mod tests {
         let mut idx = FakeIndex::default();
         index_bundle_full(&bundle, &FakeParser, &mut idx);
         assert_eq!(idx.records[0], ("metrics/rev.md".to_string(), "Metric".to_string()));
-    }
-
-    // ── SearchBundle ──────────────────────────────────────────────────────────
-
-    #[test]
-    fn search_bundle_full_returns_hits() {
-        let search = FakeSearch {
-            hits: vec![SearchHit { path: "notes/a.md".into(), concept_type: "Note".into(), title: "Alpha".into(), description: String::new(), trust: Trust::default(), via: SearchVia::Direct }],
-        };
-        let result = search_bundle_full(&search, &SearchQuery { text: "alpha".into(), limit: 10, ..Default::default() });
-        assert_eq!(result.hits.len(), 1);
-        assert_eq!(result.hits[0].path, "notes/a.md");
-        assert_eq!(result.hits[0].via, SearchVia::Direct);
-    }
-
-    #[test]
-    fn search_bundle_full_applies_type_filter() {
-        let search = FakeSearch {
-            hits: vec![
-                SearchHit { path: "n/a.md".into(), concept_type: "Note".into(), title: "".into(), description: String::new(), trust: Trust::default(), via: SearchVia::Direct },
-                SearchHit { path: "d/b.md".into(), concept_type: "Decision".into(), title: "".into(), description: String::new(), trust: Trust::default(), via: SearchVia::Direct },
-            ],
-        };
-        let result = search_bundle_full(&search, &SearchQuery {
-            text: "q".into(), concept_type: Some("Note".into()), limit: 10, ..Default::default()
-        });
-        assert_eq!(result.hits.len(), 1);
-        assert_eq!(result.hits[0].concept_type, "Note");
-    }
-
-    #[test]
-    fn search_bundle_full_empty_query_returns_nothing() {
-        let search = FakeSearch { hits: vec![] };
-        let result = search_bundle_full(&search, &SearchQuery::default());
-        assert!(result.hits.is_empty());
-    }
-
-    #[test]
-    fn search_bundle_full_respects_limit() {
-        let hits: Vec<SearchHit> = (0..20)
-            .map(|i| SearchHit {
-                path: format!("n/{i}.md"),
-                concept_type: "Note".into(),
-                title: format!("{i}"),
-                description: String::new(),
-                trust: Trust::default(),
-                via: SearchVia::Direct,
-            })
-            .collect();
-        let search = FakeSearch { hits };
-        let result = search_bundle_full(&search, &SearchQuery { text: "x".into(), limit: 5, ..Default::default() });
-        assert_eq!(result.hits.len(), 5);
-    }
-
-    #[test]
-    fn search_bundle_full_link_via_preserved() {
-        let search = FakeSearch {
-            hits: vec![SearchHit { path: "n/linked.md".into(), concept_type: "Note".into(), title: "".into(), description: String::new(), trust: Trust::default(), via: SearchVia::Link }],
-        };
-        let result = search_bundle_full(&search, &SearchQuery { text: "x".into(), limit: 10, ..Default::default() });
-        assert_eq!(result.hits[0].via, SearchVia::Link);
     }
 
     // ── ExportBundle ──────────────────────────────────────────────────────────

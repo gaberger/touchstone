@@ -118,7 +118,7 @@ pub struct SearchQuery {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchVia { Direct, Link }
 
-/// A ranked concept returned by `FilteredSearch`.
+/// A ranked concept returned by `BundleIndex::search`.
 ///
 /// Carries the display fields directly rather than wrapping a `Concept`. There were two
 /// competing hit shapes — this one and a richer struct inside the CLI adapter — because the
@@ -213,11 +213,6 @@ pub trait BundleIndex {
     fn all_paths(&self) -> Vec<String>;
 }
 
-/// Structured search with prefilter. Implemented by adapters holding a full-text index.
-/// The basic `SearchIndex` trait remains for callers that only need plain text search.
-pub trait FilteredSearch {
-    fn search_filtered(&self, q: &SearchQuery) -> Vec<SearchHit>;
-}
 
 // ── Blanket impls for owned/boxed port objects ───────────────────────────────
 
