@@ -42,7 +42,7 @@ pub fn run<F, P>(
     make_sink: &dyn Fn(&std::path::Path) -> Box<dyn ConceptSink>,
 ) -> i32
 where
-    F: ConceptRepository + RawStore + ConceptSink,
+    F: ConceptRepository + RawStore + ConceptSink + touchstone_ports::EventLog,
     P: ConceptParser,
 {
     match &cli.command {

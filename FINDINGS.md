@@ -617,8 +617,10 @@ not hold.
 - **A10** — a caveated pilot run (E11) put the baseline at 11/20 against the 15/20 kill
   threshold, and touchstone at 18/20. Questions written by Claude over a corpus it partly
   wrote; the real experiment needs the user's questions over the user's notes.
-- **A3** (will anyone write into it) — untouched. Needs three weeks, and is now the single
-  largest unanswered risk.
+- **A3** (will anyone write into it) — **instrumented, not answered.** The binary now logs
+  every capture to `<bundle>/.a3/capture.jsonl` from both surfaces, and `a3/report.sh` applies
+  the pre-registered criterion. It needs three weeks of real use and the day split, which only
+  the user can supply. Still the single largest unanswered risk.
 - **A6 on real embeddings with ANN** — before deleting the corporate seam for good.
 - ~~**T2 against the upstream sample bundles**~~ — run; see E4. A2 survives; A1 does not.
 - ~~**E4b**~~ — resolved; see E8. A1 narrows to what touchstone generates.

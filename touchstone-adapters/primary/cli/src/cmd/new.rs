@@ -9,13 +9,13 @@
 //! is derived, not authored.
 
 use crate::args::NewArgs;
-use touchstone_ports::{Clock, ConceptParser, ConceptSink};
-use touchstone_usecases::{capture_concept, CaptureRequest};
+use touchstone_ports::{Clock, ConceptParser, ConceptSink, EventLog, RawStore};
+use touchstone_usecases::{capture_concept_logged, CaptureRequest};
 
 pub fn run<P, W>(args: &NewArgs, parser: &P, sink: &W, clock: &dyn Clock) -> i32
 where
     P: ConceptParser,
-    W: ConceptSink,
+    W: ConceptSink + RawStore + EventLog,
 {
     let req = CaptureRequest {
         concept_type: args.concept_type.clone(),
@@ -25,7 +25,8 @@ where
         subdir: args.dir.clone(),
         generated_by: args.generated.clone(),
     };
-    match capture_concept(&req, parser, sink, clock) {
+    // surface = "cli": a human typed this. A3 turns on that distinction.
+    match capture_concept_logged(&req, parser, sink, clock, sink, "cli") {
         Ok(path) => {
             println!("{path}");
             0
