@@ -218,6 +218,7 @@ compile error, and the whole gate on every push.
 
 | | |
 |---|---|
+| [docs/USING.md](docs/USING.md) | How to run one as a business brain — what to ingest, what to write, what to sign |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The design as it is today |
 | [docs/adrs/](docs/adrs/) | Why each decision was made — append-only |
 | [PROTOTYPE.md](PROTOTYPE.md) | How to falsify it. Pre-registered kill criteria |
