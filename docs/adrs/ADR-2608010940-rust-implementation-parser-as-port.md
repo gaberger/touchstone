@@ -113,7 +113,7 @@ Rust conformance suite reproduces all ten drills.
 | P3 | `touchstone-ports` — traits only, imports domain for value types only | Completed | code:touchstone-ports/src/lib.rs, test:cargo check -p touchstone-ports |
 | P4 | `yaml-serde` adapter + **parser port-contract suite incl. merge-key behaviour** | Pending — adapter done, contract suite outstanding (ADR-2608010950 P4) | code:touchstone-adapters/secondary/yaml-serde/src/lib.rs, test:cargo test -p touchstone-conformance parser_contract |
 | P5 | `fs-bundle` + `sqlite-index` adapters | Completed | code:touchstone-adapters/secondary/sqlite-index/src/lib.rs, test:cargo test -p touchstone-sqlite-index |
-| P6 | `touchstone-cli` composition root; CLI-MCP parity per hex ADR-019 | Pending — CLI complete, MCP surface is still a stub | code:touchstone-cli/src/main.rs, test:cargo test -p touchstone-cli parity |
+| P6 | `touchstone-cli` composition root; CLI-MCP parity per hex ADR-019 | Completed — ADR-2608021132 | code:touchstone-cli/src/main.rs, test:cargo test -p touchstone-cli parity |
 | P7 | Rust suite reproduces all 10 Python drills; retire the oracle | Completed — FINDINGS E6 | test:cargo test -p touchstone-conformance |
 
 ## References

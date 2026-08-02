@@ -63,6 +63,7 @@ that true).
 | | `crdt-sync`, `embed-local` | deferred — gated on A7 and A4, untested assumptions |
 | composition | `touchstone-cli` | **done** — full command surface |
 | conformance | `touchstone-conformance` | **done** — the drills, as a black-box gate |
+| primary | `touchstone-mcp-adapter` | **done** — MCP 2026-07-28, graded for agents |
 
 ```bash
 cargo build --release --bin touchstone   # the conformance suite drives this binary
@@ -108,8 +109,42 @@ to the same drills, not just the two that happened to exist.
 | `touchstone export <dir>` | Write raw bytes back out. Byte-exact by construction |
 | `touchstone stats` | Concepts by type, trust tier, status; link and broken-link counts |
 | `touchstone show <path>` | One concept's derived view. `--json` emits parsed frontmatter verbatim |
+| `touchstone mcp [--http ADDR]` | Serve the MCP tool surface. stdio by default; Streamable HTTP on request |
 
 Filters: `--type`, `--tag`, `--status`, `--trust`, `--limit`, `--no-expand`.
+
+## For agents: the MCP surface
+
+```bash
+touchstone --bundle ~/brain mcp                      # stdio, for a local agent
+touchstone --bundle ~/brain mcp --http 127.0.0.1:8765 # Streamable HTTP
+```
+
+Nine tools at MCP revision **2026-07-28**, each with input *and* output schemas, structured
+content, and annotations so a client knows which calls need human confirmation:
+`discover`, `search`, `show`, `stats`, `index`, `lint`, `fmt`, `new`, `export`.
+
+The surface is graded against [api-ai-readiness](https://github.com/gaberger/api-ai-readiness),
+and the gradeable part is a **test**, not a report — see
+`touchstone-adapters/primary/mcp/tests/ai_readiness.rs`:
+
+| Dimension | What the surface does |
+|---|---|
+| Response discipline | `limit` with a declared default of 10, ceiling 200; results carry `total`/`returned`, never a bare array |
+| Field selection | `fields` on every result-bearing tool — ask for `["path"]` and get paths |
+| Retrieval shape | `type`/`tag`/`status`/`trust` filter inside the query, not after |
+| Self-description | recoverable failures say *what to do next*; only an unknown tool is a protocol error |
+| Workflow atomicity | a concept path is the only identifier, and one call gets you one |
+| Discovery | `touchstone_discover`, callable with no arguments |
+
+**Parity is enforced.** `tests/parity.rs` fails the build if a CLI command has no MCP tool or
+vice versa — the check [hex ADR-019](https://github.com/gaberger/hex/blob/main/docs/adrs/ADR-019-cli-mcp-parity.md)
+specifies and leaves unimplemented. A human can do everything an agent can, and the reverse.
+
+**No tool can write `verified`.** A concept an agent creates is `machine`, never `human`.
+
+> **The HTTP transport has no authentication** and can read *and write* the bundle. stdio is the
+> default for that reason. Bind HTTP to loopback, or put auth in front of it.
 
 ## Design rules
 

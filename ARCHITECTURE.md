@@ -65,7 +65,8 @@ touchstone-usecases/        compose ports. IndexBundle · SearchBundle · Captur
 touchstone-adapters/
   primary/
     cli/             `touchstone` command surface
-    mcp/             MCP tool surface (CLI-MCP parity, hex ADR-019)
+    mcp/             MCP tool surface, revision 2026-07-28. Graded against
+                     api-ai-readiness by test; parity with the CLI enforced by test.
   secondary/
     yaml-serde/      FrontmatterParser  ← serde_yaml_ng
     fs-bundle/       ConceptRepository  ← filesystem walk + raw byte IO
@@ -165,13 +166,22 @@ not a bug fix. The gate prints it on every run.
 1. `touchstone-domain/` imports only `touchstone-domain/`.
 2. `touchstone-ports/` imports `touchstone-domain/` only, for value types.
 3. `touchstone-usecases/` imports `touchstone-domain/` + `touchstone-ports/` only.
-4. `adapters/primary/` and `adapters/secondary/` import `touchstone-ports/` only.
+4a. `adapters/secondary/` import `touchstone-ports/` only — they **implement** ports.
+4b. `adapters/primary/` import `touchstone-usecases/` + `touchstone-ports/` — they **drive**
+   use cases, and must name `touchstone-usecases`.
 5. Adapters NEVER import other adapters.
 6. `touchstone-cli/` composition root is the ONLY file that imports adapters.
 7. `touchstone-conformance/` imports **no** internal crate — it drives the built binary.
 
 Rule 5 is what makes the parser swap, the git swap, and the CRDT addition independent
 merge units — three agents, three worktrees, no coordination.
+
+Rule 4 was a single rule until the MCP surface was built, and the split is the most
+consequential correction in this document. Forbidding `touchstone-usecases` to *every*
+adapter is right for a driven one and wrong for a driving one — and it is why the use-case
+layer sat unreachable with 1,074 tested lines while the CLI reimplemented it. The gate did
+not merely fail to catch that duplication; it required it
+([ADR-2608021132](docs/adrs/ADR-2608021132-mcp-surface-graded-for-agents.md)).
 
 Rule 7 is what stops the conformance suite from grading its own homework. A suite that
 imported `touchstone-domain` could assert against the very code that produced the answer and would
