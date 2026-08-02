@@ -21,7 +21,7 @@ is what happens once most of your knowledge base is machine-written:
 | `raw/` is authoritative | — | same rule: raw bytes are truth, frontmatter is a query view |
 | `wiki/` is regenerable | — | A1, enforced by the T1 drill |
 | `CLAUDE.md` is a private schema | no interchange, no portability | **an open spec** — bundles move between tools, byte-losslessly |
-| generated pages read like facts | no way to tell what was verified | **trust tiers** — `verified` > `attested` > `generated`, derived and never authored |
+| generated pages read like facts | no way to tell what was verified | **trust tiers** — `human` > `machine` > `unattributed`, derived and never authored, and now **signed** |
 
 So the bet is not "an LLM can maintain a wiki" — that is settled and freely available. The
 bet is that once it does, you will need to know **which parts you can rely on** and **how to
@@ -32,8 +32,10 @@ That also names the real mess: knowledge management was already fragmented acros
 do not interoperate, and machine-written knowledge is about to make the fragmentation worse
 and the reliability question urgent at the same time.
 
-**Status: Stage 1 walking skeleton.** The design is adjudicated and the core claims are
-tested; the two highest-risk assumptions are not yet answered.
+**Status: Stage 1, built and instrumented.** The correctness claims are measured, the
+provenance claims are now signed and verifiable, and it holds at 50k concepts. The question it
+cannot answer about itself — whether anyone writes into it unprompted — is instrumented and
+running (A3). Retrieval beat a fair `rg` baseline in a caveated pilot (A10, E11).
 
 ## Documents
 
@@ -42,7 +44,7 @@ tested; the two highest-risk assumptions are not yet answered.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The design. Layers, bundle layout, type vocabulary, retrieval, the one ACL seam |
 | [DECISIONS.md](DECISIONS.md) | Adversarial review record — two opposing reviewers, five open questions adjudicated, dissents preserved |
 | [PROTOTYPE.md](PROTOTYPE.md) | How to falsify all of it. Assumption ledger ranked by risk, pre-registered kill criteria |
-| [FINDINGS.md](FINDINGS.md) | Experimental results. Three experiments so far; two overturned load-bearing claims |
+| [FINDINGS.md](FINDINGS.md) | Experimental results. Fourteen experiments; several overturned load-bearing claims, including two found by the harnesses built to test them |
 
 ## Status: Rust, port complete
 
@@ -67,7 +69,7 @@ that true).
 
 ```bash
 cargo build --release --bin touchstone   # the conformance suite drives this binary
-cargo test --workspace                   # 171 tests
+cargo test --workspace                   # 173 tests (build the binary first -- conformance drives it)
 bash tests/verify.sh                     # the standing acceptance gate
 ```
 
