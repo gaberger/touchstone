@@ -42,8 +42,16 @@ impl FsBundle {
 /// working and fixture areas (`_upstream/`, `_work-*`). `node_modules` is excluded because a
 /// vendored JS tree can hold thousands of markdown files that are not knowledge.
 fn skip_dir(name: &str) -> bool {
-    name.starts_with('.') || name.starts_with('_') || name == "node_modules"
+    name.starts_with('.') || name.starts_with('_') || name == "node_modules" || name == RAW_DIR
 }
+
+/// The immutable source layer. Reserved at the bundle root.
+///
+/// Excluded from the concept walk deliberately: a markdown file you pasted in from somewhere
+/// else is source material, not a concept, and indexing it would put unverified third-party
+/// text into the same ranking pool as knowledge you wrote. It becomes knowledge when a concept
+/// cites it.
+pub const RAW_DIR: &str = "raw";
 
 /// True when a filename is a concept rather than a generated artifact.
 ///
@@ -121,6 +129,35 @@ impl ConceptRepository for FsBundle {
         out.sort();
         out
     }
+
+    fn raw_paths(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        walk_all(&self.root, &self.root.join(RAW_DIR), &mut out);
+        out.sort();
+        out
+    }
+}
+
+/// Walk every file, regardless of extension. Used only for `raw/`, where a `.md` is still
+/// source material rather than a concept.
+fn walk_all(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if path.is_dir() {
+            if !name.starts_with('.') {
+                walk_all(root, &path, out);
+            }
+        } else if path.is_file() {
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.push(to_slash(rel));
+            }
+        }
+    }
 }
 
 /// Walk every non-markdown file, applying the same directory rules as the concept walk.
@@ -136,6 +173,8 @@ fn walk_artifacts(root: &Path, dir: &Path, out: &mut Vec<String>) {
         let name = entry.file_name();
         let name = name.to_string_lossy();
         if path.is_dir() {
+            // skip_dir excludes raw/, which raw_paths() reports separately -- otherwise a raw
+            // PDF would be both an artifact and a source, and export would write it twice.
             if !skip_dir(&name) {
                 walk_artifacts(root, &path, out);
             }

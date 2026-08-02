@@ -55,8 +55,11 @@ mod tests {
         fn paths(&self) -> Vec<String> {
             self.0.keys().cloned().collect()
         }
-        /// Lint reads concepts only; this fake carries no artifacts.
+        /// Lint reads concepts only; this fake carries no artifacts and no raw sources.
         fn artifact_paths(&self) -> Vec<String> {
+            Vec::new()
+        }
+        fn raw_paths(&self) -> Vec<String> {
             Vec::new()
         }
     }

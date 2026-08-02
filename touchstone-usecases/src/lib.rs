@@ -146,10 +146,11 @@ where
         sink.write(path, &raw)?;
         count += 1;
     }
-    // ...and the artifacts. A bundle whose PDFs do not travel with it is not portable,
-    // whatever the markdown does (drill M1).
+    // ...the artifacts, and the raw sources. A bundle whose PDFs do not travel with it is not
+    // portable (M1); one whose SOURCES do not travel cannot have its provenance checked at all,
+    // because every `sources[].resource` pointing into raw/ would dangle.
     let mut artifacts = 0;
-    for path in &repo.artifact_paths() {
+    for path in repo.artifact_paths().iter().chain(repo.raw_paths().iter()) {
         let raw = repo.raw_bytes(path)
             .ok_or_else(|| format!("raw bytes not found for {path}"))?;
         sink.write(path, &raw)?;
@@ -250,6 +251,20 @@ pub fn lint_one(c: &ParsedConcept, report: &mut LintReport) {
 
     if c.has_wikilinks {
         push(report, path, "body contains [[wikilinks]] -- not OKF, will not resolve");
+    }
+
+    // A concept an agent wrote, citing nothing, cannot be audited by anyone. The trust tier
+    // already says "machine"; without a source there is no way to check what the machine read.
+    // This is the rule that makes the provenance chain -- raw document, concept, signature --
+    // complete rather than aspirational.
+    if c.trust == ports::Trust::Generated && c.frontmatter_json.contains("\"generated\"")
+        && !c.frontmatter_json.contains("\"sources\"")
+    {
+        push(
+            report,
+            path,
+            "machine-generated with no `sources` -- nothing records what it was compiled from",
+        );
     }
 }
 
@@ -433,14 +448,29 @@ mod tests {
 
     impl ConceptRepository for FakeBundle {
         fn paths(&self) -> Vec<String> {
-            let mut v: Vec<String> = self.0.keys().filter(|k| k.ends_with(".md")).cloned().collect();
+            let mut v: Vec<String> = self
+                .0
+                .keys()
+                .filter(|k| k.ends_with(".md") && !k.starts_with("raw/"))
+                .cloned()
+                .collect();
             v.sort();
             v
         }
-        /// Anything non-markdown in the fake is an artifact, so export coverage is testable
+        /// Anything non-markdown outside raw/ is an artifact, so export coverage is testable
         /// here rather than only in the media drills.
         fn artifact_paths(&self) -> Vec<String> {
-            let mut v: Vec<String> = self.0.keys().filter(|k| !k.ends_with(".md")).cloned().collect();
+            let mut v: Vec<String> = self
+                .0
+                .keys()
+                .filter(|k| !k.ends_with(".md") && !k.starts_with("raw/"))
+                .cloned()
+                .collect();
+            v.sort();
+            v
+        }
+        fn raw_paths(&self) -> Vec<String> {
+            let mut v: Vec<String> = self.0.keys().filter(|k| k.starts_with("raw/")).cloned().collect();
             v.sort();
             v
         }
@@ -995,6 +1025,7 @@ mod tests {
         impl ConceptRepository for MinRepo {
             fn paths(&self) -> Vec<String> { vec![] }
             fn artifact_paths(&self) -> Vec<String> { vec![] }
+            fn raw_paths(&self) -> Vec<String> { vec![] }
         }
         struct MinIdx;
         impl touchstone_ports::SearchIndex for MinIdx { fn search(&self, _: &str) -> Vec<Concept> { vec![] } }
@@ -1348,4 +1379,78 @@ where
         }
     }
     report
+}
+
+// ── RawLayer: ingest, and the work queue ─────────────────────────────────────
+
+/// Where ingested source documents land.
+pub const RAW_DIR: &str = "raw";
+
+#[derive(Debug, Default)]
+pub struct IngestReport {
+    pub ingested: Vec<String>,
+    pub skipped: Vec<(String, String)>,
+}
+
+/// Copy source documents into `raw/`, byte-for-byte.
+///
+/// Ingest is deliberately dumb: it does not parse, convert, summarise or extract. The raw
+/// layer is the thing everything else is checked *against*, so anything that transformed on the
+/// way in would destroy the property that makes it worth having — you can always go back and
+/// see what was actually said.
+///
+/// Compiling raw material into concepts is an agent's job, not this function's. That separation
+/// is the whole architecture: raw bytes are authoritative, concepts are a derived reading of
+/// them, and the reading cites what it read.
+pub fn ingest_raw<W, R>(sources: &[(String, Vec<u8>)], sink: &W, repo: &R) -> IngestReport
+where
+    W: ConceptSink,
+    R: ConceptRepository,
+{
+    let existing: std::collections::HashSet<String> = repo.raw_paths().into_iter().collect();
+    let mut report = IngestReport::default();
+
+    for (name, bytes) in sources {
+        let stem = name.rsplit('/').next().unwrap_or(name);
+        let rel = format!("{RAW_DIR}/{stem}");
+        if existing.contains(&rel) {
+            // Never overwrite. Raw material is immutable by definition -- if it changed, it is
+            // a different document and deserves a different name.
+            report.skipped.push((rel, "already ingested; raw material is immutable".into()));
+            continue;
+        }
+        match sink.write(&rel, bytes) {
+            Ok(()) => report.ingested.push(rel),
+            Err(e) => report.skipped.push((rel, e)),
+        }
+    }
+    report
+}
+
+/// Raw documents that no concept cites yet — the agent's work queue.
+///
+/// "Unprocessed" is DERIVED, not tracked. A raw document is processed exactly when some concept
+/// names it in `sources[].resource`, so there is no state file to fall out of sync, and
+/// deleting the whole derived plane changes nothing. That is the same rule the index follows,
+/// applied to the ingest pipeline.
+pub fn unprocessed_raw<F, P>(files: &F, parser: &P) -> Vec<String>
+where
+    F: ConceptRepository + RawStore,
+    P: ConceptParser,
+{
+    let mut cited: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for path in &files.paths() {
+        let Some(raw) = files.raw_bytes(path) else { continue };
+        let parsed = parser.parse(path, &raw);
+        // `sources` is not projected onto ParsedConcept, so read it from the frontmatter view.
+        // Matching on the raw/ path as a substring is deliberately generous: a citation may be
+        // bundle-absolute, relative, or a bare filename, and all three mean the same document.
+        for candidate in files.raw_paths() {
+            let stem = candidate.rsplit('/').next().unwrap_or(&candidate).to_string();
+            if parsed.frontmatter_json.contains(&candidate) || parsed.frontmatter_json.contains(&stem) {
+                cited.insert(candidate);
+            }
+        }
+    }
+    files.raw_paths().into_iter().filter(|r| !cited.contains(r)).collect()
 }

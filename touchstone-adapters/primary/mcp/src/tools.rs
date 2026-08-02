@@ -41,11 +41,13 @@ pub const TOOL_NAMES: &[&str] = &[
     "touchstone_export",
     "touchstone_fmt",
     "touchstone_index",
+    "touchstone_ingest",
     "touchstone_lint",
     "touchstone_new",
     "touchstone_search",
     "touchstone_show",
     "touchstone_stats",
+    "touchstone_unprocessed",
     "touchstone_verify",
 ];
 
@@ -226,6 +228,33 @@ pub fn all() -> Vec<Tool> {
             writes("Rebuild the index", true, true),
         ),
         tool(
+            "touchstone_ingest",
+            "Ingest source material",
+            "Copy a source document into the immutable `raw/` layer, verbatim. Nothing is parsed, \
+             converted or summarised on the way in -- raw material is what every concept is later \
+             checked against, so it must come back out byte-identical. After ingesting, compile \
+             concepts from it with touchstone_new and cite it in `sources`; that citation is what \
+             moves it off the unprocessed queue.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Filename to store it under in raw/, e.g. interview-2026-08.txt" },
+                    "content": { "type": "string", "description": "The document's text content, verbatim." }
+                },
+                "required": ["name", "content"],
+                "additionalProperties": false
+            }),
+            json!({
+                "type": "object",
+                "properties": {
+                    "ingested": { "type": "array", "items": { "type": "string" } },
+                    "skipped": { "type": "array", "items": { "type": "object" } }
+                },
+                "required": ["ingested", "skipped"]
+            }),
+            writes("Ingest source material", false, false),
+        ),
+        tool(
             "touchstone_lint",
             "Check conformance",
             "Check every concept against the OKF conformance floor plus the duplicate rules that \
@@ -358,6 +387,28 @@ pub fn all() -> Vec<Tool> {
                 "required": ["concepts", "links", "broken_links"]
             }),
             read_only("Summarise the bundle"),
+        ),
+        tool(
+            "touchstone_unprocessed",
+            "List uncompiled sources",
+            "Raw documents that no concept cites yet -- your work queue. Read one, write concepts \
+             capturing what it says, and cite it in each concept's `sources`; it then leaves this \
+             list. Derived rather than tracked: a document counts as processed exactly when some \
+             concept names it, so there is no separate state to go stale.",
+            json!({
+                "type": "object",
+                "properties": { "limit": limit_prop() },
+                "additionalProperties": false
+            }),
+            json!({
+                "type": "object",
+                "properties": {
+                    "total": { "type": "integer" }, "uncited": { "type": "integer" },
+                    "documents": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["total", "uncited", "documents"]
+            }),
+            read_only("List uncompiled sources"),
         ),
         tool(
             "touchstone_verify",
