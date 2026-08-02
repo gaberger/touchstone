@@ -55,6 +55,10 @@ mod tests {
         fn paths(&self) -> Vec<String> {
             self.0.keys().cloned().collect()
         }
+        /// Lint reads concepts only; this fake carries no artifacts.
+        fn artifact_paths(&self) -> Vec<String> {
+            Vec::new()
+        }
     }
     impl RawStore for Files {
         fn raw_bytes(&self, path: &str) -> Option<Vec<u8>> {

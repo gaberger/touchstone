@@ -123,7 +123,10 @@ where
 /// Summary returned by `export_bundle`.
 #[derive(Debug, Default)]
 pub struct ExportStats {
+    /// Concepts written.
     pub count: usize,
+    /// Non-markdown artifacts written — images, PDFs, recordings, scripts.
+    pub artifacts: usize,
 }
 
 /// Write raw bytes for every concept in `repo` to `sink`, byte-exact.
@@ -135,15 +138,23 @@ where
     R: ConceptRepository + RawStore,
     W: ConceptSink,
 {
-    let concepts = repo.paths();
     let mut count = 0;
-    for path in &concepts {
+    for path in &repo.paths() {
         let raw = repo.raw_bytes(path)
             .ok_or_else(|| format!("raw bytes not found for {path}"))?;
         sink.write(path, &raw)?;
         count += 1;
     }
-    Ok(ExportStats { count })
+    // ...and the artifacts. A bundle whose PDFs do not travel with it is not portable,
+    // whatever the markdown does (drill M1).
+    let mut artifacts = 0;
+    for path in &repo.artifact_paths() {
+        let raw = repo.raw_bytes(path)
+            .ok_or_else(|| format!("raw bytes not found for {path}"))?;
+        sink.write(path, &raw)?;
+        artifacts += 1;
+    }
+    Ok(ExportStats { count, artifacts })
 }
 
 // ── LintBundle ────────────────────────────────────────────────────────────────
@@ -421,7 +432,14 @@ mod tests {
 
     impl ConceptRepository for FakeBundle {
         fn paths(&self) -> Vec<String> {
-            let mut v: Vec<String> = self.0.keys().cloned().collect();
+            let mut v: Vec<String> = self.0.keys().filter(|k| k.ends_with(".md")).cloned().collect();
+            v.sort();
+            v
+        }
+        /// Anything non-markdown in the fake is an artifact, so export coverage is testable
+        /// here rather than only in the media drills.
+        fn artifact_paths(&self) -> Vec<String> {
+            let mut v: Vec<String> = self.0.keys().filter(|k| !k.ends_with(".md")).cloned().collect();
             v.sort();
             v
         }
@@ -973,7 +991,10 @@ mod tests {
     #[test]
     fn legacy_stubs_compile() {
         struct MinRepo;
-        impl ConceptRepository for MinRepo { fn paths(&self) -> Vec<String> { vec![] } }
+        impl ConceptRepository for MinRepo {
+            fn paths(&self) -> Vec<String> { vec![] }
+            fn artifact_paths(&self) -> Vec<String> { vec![] }
+        }
         struct MinIdx;
         impl touchstone_ports::SearchIndex for MinIdx { fn search(&self, _: &str) -> Vec<Concept> { vec![] } }
         assert_eq!(index_bundle(&MinRepo), 0);

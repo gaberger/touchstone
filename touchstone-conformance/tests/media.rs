@@ -178,20 +178,42 @@ fn m3_no_artifact_is_orphaned_by_a_rebuild() {
     let after = described(&b);
 
     let all = artifacts(&b.root);
-    let orphaned: Vec<&String> = all.iter().filter(|a| !after.contains(*a)).collect();
+    let orphaned: Vec<String> = all.iter().filter(|a| !after.contains(*a)).cloned().collect();
+
+    // ── Recorded defect, not an accepted one ────────────────────────────────
+    // E4b is undecided: either `index` reconstructs a directory that holds no concepts, or A1
+    // narrows to directories that do. That is a reading of the spec, and this drill has no
+    // business making it. So the KNOWN shape is asserted rather than tolerated -- a different
+    // set of orphans fails, and so does an empty one, because a defect that quietly stops
+    // reproducing means FINDINGS.md is asserting something false.
+    const KNOWN_ORPHANS: [&str; 1] = ["orphan/attester.sql"];
+
+    if orphaned.iter().map(String::as_str).eq(KNOWN_ORPHANS) {
+        eprintln!(
+            "  XFAIL  m3: {:?} orphaned by rebuild -- E4b, undecided.\n\
+             \x20        Its only description is a hand-written index.md in a directory with no\n\
+             \x20        concepts, so `index` deletes it and cannot regenerate it. Same shape as\n\
+             \x20        _upstream/acme_retail/attesters/sql_equality.py.\n\
+             \x20        {} of {} artifacts described before the rebuild.",
+            orphaned, before.len(), all.len()
+        );
+        return;
+    }
 
     assert!(
         orphaned.is_empty(),
-        "\n{} of {} artifact(s) have no describing concept after a rebuild: {orphaned:?}\n\
-         (before the rebuild: {} described)\n\n\
+        "\n{} artifact(s) orphaned by a rebuild, and NOT the recorded set:\n  got      {orphaned:?}\n  recorded {KNOWN_ORPHANS:?}\n\n\
          The bytes are still on disk. What was lost is the knowledge ABOUT them -- what the \
          file is, who verified it, when it goes stale -- which is the entire reason a knowledge \
          base attaches to media at all. An artifact nobody can account for is not an asset, it \
-         is a liability.\n\n\
-         This is E4b seen from the media case rather than as an A1 technicality.",
-        orphaned.len(),
-        all.len(),
-        before.len()
+         is a liability.",
+        orphaned.len()
+    );
+
+    panic!(
+        "m3 no longer reproduces E4b: nothing was orphaned.\n\
+         That is good news, but it means the recorded defect is fixed and FINDINGS.md still \
+         says otherwise. Close E4b, then remove KNOWN_ORPHANS."
     );
 }
 

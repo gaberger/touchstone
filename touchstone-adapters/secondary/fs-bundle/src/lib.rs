@@ -114,6 +114,37 @@ impl ConceptRepository for FsBundle {
         out.sort();
         out
     }
+
+    fn artifact_paths(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        walk_artifacts(&self.root, &self.root, &mut out);
+        out.sort();
+        out
+    }
+}
+
+/// Walk every non-markdown file, applying the same directory rules as the concept walk.
+///
+/// Markdown is excluded because it is either a concept (handled by `paths`) or a generated
+/// `index.md` (derived, and regenerated rather than copied).
+fn walk_artifacts(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if path.is_dir() {
+            if !skip_dir(&name) {
+                walk_artifacts(root, &path, out);
+            }
+        } else if path.is_file() && !name.ends_with(".md") {
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.push(to_slash(rel));
+            }
+        }
+    }
 }
 
 impl RawStore for FsBundle {
