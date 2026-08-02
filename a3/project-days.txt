@@ -1,0 +1,8 @@
+# Days you were actively working ON touchstone. One YYYY-MM-DD per line.
+#
+# The tool cannot know this and must not guess: the whole experiment turns on the difference
+# between "wrote a note while already in the codebase" and "wrote a note because it was worth
+# writing". Only you know which day was which.
+#
+# Fill this in as you go, not at the end -- reconstructing it after seeing the capture series
+# is how a pre-registered split stops being one.

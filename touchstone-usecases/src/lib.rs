@@ -4,7 +4,7 @@
 
 use touchstone_ports as ports;
 use touchstone_ports::{
-    Clock, Concept, ConceptParser, ConceptRepository, ConceptSink,
+    CaptureEvent, Clock, Concept, ConceptParser, ConceptRepository, ConceptSink, EventLog,
     IndexPopulator, NewConceptRequest, ParsedConcept, RawStore, SearchHit, SearchQuery,
 };
 
@@ -1169,4 +1169,48 @@ fn write_indexes<W: ConceptSink>(sink: &W, concepts: &[ParsedConcept]) -> usize 
         }
     }
     written
+}
+
+// ── CaptureConcept, instrumented ──────────────────────────────────────────────
+
+/// `capture_concept`, with the A3 event recorded.
+///
+/// A wrapper rather than a parameter on the core function, for two reasons. The measurement is
+/// an *experiment*, not a feature, and it should be removable without touching the capture
+/// path. And both primary adapters call this one function, so the human/agent split cannot
+/// drift the way it would if each surface logged for itself.
+///
+/// Logging failures are swallowed deliberately: a full disk or a read-only bundle must not
+/// stop someone recording a thought. An experiment that can block capture would corrupt the
+/// very measurement it exists to take.
+pub fn capture_concept_logged<P, W, C, L>(
+    req: &CaptureRequest,
+    parser: &P,
+    sink: &W,
+    clock: &C,
+    log: &L,
+    surface: &str,
+) -> Result<String, String>
+where
+    P: ConceptParser,
+    W: ConceptSink + RawStore,
+    C: Clock + ?Sized,
+    L: EventLog + ?Sized,
+{
+    let started = std::time::Instant::now();
+    let path = capture_concept(req, parser, sink, clock)?;
+    let trust = sink
+        .raw_bytes(&path)
+        .map(|raw| parser.parse(&path, &raw).trust)
+        .unwrap_or_default();
+
+    let _ = log.record(&CaptureEvent {
+        at: clock.now_iso8601(),
+        surface: surface.to_string(),
+        path: path.clone(),
+        concept_type: req.concept_type.clone(),
+        trust: trust.label().to_string(),
+        elapsed_ms: started.elapsed().as_millis() as u64,
+    });
+    Ok(path)
 }

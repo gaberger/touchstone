@@ -46,6 +46,36 @@ pub trait SyncEngine { fn merge(&self, path: &str) -> Result<(), String>; }
 pub trait Embedder { fn embed(&self, text: &str) -> Vec<f32>; }
 pub trait Clock { fn now_iso8601(&self) -> String; }
 
+/// One capture event, for the A3 adoption experiment.
+///
+/// A3 asks whether a human writes into the brain **on days nobody asked them to**. The tool
+/// cannot observe intent, so it records what it can and the readout does the rest: `surface`
+/// separates a person typing `touchstone new` from an agent calling `touchstone_new`, and the
+/// day-split is supplied by the experimenter.
+#[derive(Debug, Clone, Default)]
+pub struct CaptureEvent {
+    pub at: String,
+    /// `cli` when a human typed it, `mcp` when an agent called it. Without this the primary
+    /// measurement is meaningless: an agent writing daily would look like adoption.
+    pub surface: String,
+    pub path: String,
+    pub concept_type: String,
+    /// Derived tier of the created concept. Always `machine` or `unattributed` — nothing here
+    /// can produce `human`.
+    pub trust: String,
+    /// Wall time of the command. A LOWER BOUND on capture friction, never the real figure:
+    /// the clock that matters starts when the person decides to record something, and no
+    /// program can see that. PROTOTYPE.md puts the bar at ~20 s.
+    pub elapsed_ms: u64,
+}
+
+/// Append-only record of capture events. Deliberately not part of the derived plane: the
+/// experiment log must survive `rm -rf .touchstone` or three weeks of evidence dies with a
+/// rebuild.
+pub trait EventLog {
+    fn record(&self, event: &CaptureEvent) -> Result<(), String>;
+}
+
 // ── Extended ports for the use-case layer ────────────────────────────────────
 
 /// Full-fidelity parser for use-case coordination. Returns the complete derived

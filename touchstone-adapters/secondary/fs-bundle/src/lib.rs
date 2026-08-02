@@ -17,7 +17,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use touchstone_ports::{ConceptRepository, ConceptSink, RawStore};
+use touchstone_ports::{CaptureEvent, ConceptRepository, ConceptSink, EventLog, RawStore};
 
 pub struct FsBundle {
     pub root: PathBuf,
@@ -144,6 +144,37 @@ fn walk_artifacts(root: &Path, dir: &Path, out: &mut Vec<String>) {
                 out.push(to_slash(rel));
             }
         }
+    }
+}
+
+/// Where the A3 capture log lives, relative to the bundle root.
+///
+/// Dot-prefixed, so the concept walk and the artifact walk both skip it — the log is not
+/// knowledge and must never be indexed as a concept. Outside `.touchstone/` on purpose: that
+/// directory is derived and gets deleted, and an experiment log that a rebuild destroys is
+/// not an experiment log.
+pub const A3_LOG_REL: &str = ".a3/capture.jsonl";
+
+impl EventLog for FsBundle {
+    fn record(&self, e: &CaptureEvent) -> Result<(), String> {
+        use std::io::Write;
+        let path = self.full_path(A3_LOG_REL);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|err| format!("cannot create {}: {err}", parent.display()))?;
+        }
+        // Hand-rolled JSON: one line, six flat scalar fields, no nesting. Pulling a serialiser
+        // into this adapter to emit it would be more dependency than the format deserves.
+        let esc = |v: &str| v.replace('\\', "\\\\").replace('"', "\\\"");
+        let line = format!(
+            "{{\"at\":\"{}\",\"surface\":\"{}\",\"path\":\"{}\",\"type\":\"{}\",\"trust\":\"{}\",\"elapsed_ms\":{}}}\n",
+            esc(&e.at), esc(&e.surface), esc(&e.path), esc(&e.concept_type), esc(&e.trust), e.elapsed_ms
+        );
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .and_then(|mut f| f.write_all(line.as_bytes()))
+            .map_err(|err| format!("cannot append to {A3_LOG_REL}: {err}"))
     }
 }
 

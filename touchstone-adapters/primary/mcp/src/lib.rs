@@ -30,11 +30,11 @@ use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use touchstone_ports::{
-    BundleIndex, Clock, ConceptParser, ConceptRepository, ConceptSink, IndexRecord, RawStore,
+    BundleIndex, Clock, ConceptParser, ConceptRepository, ConceptSink, EventLog, IndexRecord, RawStore,
     SearchQuery, SearchVia, Trust,
 };
 use touchstone_usecases::{
-    capture_concept, export_bundle, format_bundle, lint_bundle, reindex_bundle, CaptureRequest,
+    capture_concept_logged, export_bundle, format_bundle, lint_bundle, reindex_bundle, CaptureRequest,
 };
 
 /// Everything the surface needs, chosen by the composition root.
@@ -52,7 +52,7 @@ pub struct Surface<F, P, I, C> {
 
 impl<F, P, I, C> Surface<F, P, I, C>
 where
-    F: ConceptRepository + RawStore + ConceptSink + Send + Sync + 'static,
+    F: ConceptRepository + RawStore + ConceptSink + EventLog + Send + Sync + 'static,
     P: ConceptParser + Send + Sync + 'static,
     // NOT Sync: the index lives behind a Mutex, which is what makes `Surface` Sync. Demanding
     // Sync here would exclude any single-threaded connection handle -- rusqlite's among them.
@@ -337,7 +337,10 @@ where
             subdir: Self::str_arg(args, "dir"),
             generated_by: Self::str_arg(args, "generated_by"),
         };
-        match capture_concept(&req, &self.parser, &self.files, &self.clock) {
+        // surface = "mcp": an agent wrote this, and A3 must not count it as adoption.
+        match capture_concept_logged(
+            &req, &self.parser, &self.files, &self.clock, &self.files, "mcp",
+        ) {
             Ok(path) => {
                 let trust = self
                     .files
@@ -410,7 +413,7 @@ where
 
 impl<F, P, I, C> ServerHandler for Surface<F, P, I, C>
 where
-    F: ConceptRepository + RawStore + ConceptSink + Send + Sync + 'static,
+    F: ConceptRepository + RawStore + ConceptSink + EventLog + Send + Sync + 'static,
     P: ConceptParser + Send + Sync + 'static,
     // NOT Sync: the index lives behind a Mutex, which is what makes `Surface` Sync. Demanding
     // Sync here would exclude any single-threaded connection handle -- rusqlite's among them.
