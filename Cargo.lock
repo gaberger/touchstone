@@ -568,6 +568,7 @@ dependencies = [
 name = "touchstone-fs-bundle"
 version = "0.1.0"
 dependencies = [
+ "tempfile",
  "touchstone-ports",
 ]
 

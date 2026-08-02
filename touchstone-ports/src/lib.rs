@@ -18,7 +18,17 @@ pub use touchstone_domain::{
 // ── Minimal existing ports (unchanged) ───────────────────────────────────────
 
 pub trait FrontmatterParser { fn parse(&self, raw: &[u8]) -> Result<Concept, String>; }
-pub trait ConceptRepository { fn list(&self) -> Vec<Concept>; }
+/// Enumerates the concept files in a bundle. **Deliberately does not parse them.**
+///
+/// This returned `Vec<Concept>` until the parsed fields turned out to be dead: every use case
+/// read only `.path`, while the filesystem adapter — obliged to produce a `concept_type` and
+/// `title` it had no parser for — carried a hand-rolled frontmatter scanner to invent them.
+/// Two parsers over the same bytes is the exact divergence `ConceptParser` exists as a port to
+/// prevent, and this one was load-bearing on nothing.
+///
+/// Paths are bundle-relative, slash-separated, and sorted, so every walk is deterministic —
+/// which is what makes the T1 byte-identical rebuild reproducible rather than lucky.
+pub trait ConceptRepository { fn paths(&self) -> Vec<String>; }
 pub trait SearchIndex { fn search(&self, q: &str) -> Vec<Concept>; }
 pub trait VersionControl { fn attest(&self, path: &str) -> Result<(), String>; }
 pub trait SyncEngine { fn merge(&self, path: &str) -> Result<(), String>; }

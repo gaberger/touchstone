@@ -9,7 +9,7 @@ use touchstone_ports::{
 
 // Keep the legacy stub signatures so existing callers compile.
 use touchstone_ports::SearchIndex;
-pub fn index_bundle<R: ConceptRepository>(repo: &R) -> usize { repo.list().len() }
+pub fn index_bundle<R: ConceptRepository>(repo: &R) -> usize { repo.paths().len() }
 pub fn search_bundle<S: SearchIndex>(idx: &S, q: &str) -> Vec<Concept> { idx.search(q) }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -85,20 +85,20 @@ where
     P: ConceptParser,
     W: IndexPopulator,
 {
-    let concepts = repo.list();
+    let concepts = repo.paths();
     let mut stats = IndexStats { total: concepts.len(), ..Default::default() };
 
-    for concept in &concepts {
-        let raw = match repo.raw_bytes(&concept.path) {
+    for path in &concepts {
+        let raw = match repo.raw_bytes(path) {
             Some(b) => b,
             None => {
-                stats.errors.push((concept.path.clone(), "raw bytes not found".to_string()));
+                stats.errors.push((path.clone(), "raw bytes not found".to_string()));
                 continue;
             }
         };
-        let parsed = parser.parse(&concept.path, &raw);
+        let parsed = parser.parse(path, &raw);
         if let Some(ref err) = parsed.error {
-            stats.errors.push((concept.path.clone(), err.clone()));
+            stats.errors.push((path.clone(), err.clone()));
         }
         // Upsert even non-conformant concepts so the index reflects every file.
         if let Err(e) = writer.upsert(
@@ -111,7 +111,7 @@ where
             parsed.trust,
             &parsed.status,
         ) {
-            stats.errors.push((concept.path.clone(), e));
+            stats.errors.push((path.clone(), e));
         }
     }
     stats
@@ -150,12 +150,12 @@ where
     R: ConceptRepository + RawStore,
     W: ConceptSink,
 {
-    let concepts = repo.list();
+    let concepts = repo.paths();
     let mut count = 0;
-    for concept in &concepts {
-        let raw = repo.raw_bytes(&concept.path)
-            .ok_or_else(|| format!("raw bytes not found for {}", concept.path))?;
-        sink.write(&concept.path, &raw)?;
+    for path in &concepts {
+        let raw = repo.raw_bytes(path)
+            .ok_or_else(|| format!("raw bytes not found for {path}"))?;
+        sink.write(path, &raw)?;
         count += 1;
     }
     Ok(ExportStats { count })
@@ -201,15 +201,15 @@ where
     P: ConceptParser,
 {
     let mut report = LintReport::default();
-    for concept in repo.list() {
-        let raw = match repo.raw_bytes(&concept.path) {
+    for path in &repo.paths() {
+        let raw = match repo.raw_bytes(path) {
             Some(b) => b,
             None => {
-                push(&mut report, &concept.path, "raw bytes not found");
+                push(&mut report, path, "raw bytes not found");
                 continue;
             }
         };
-        let parsed = parser.parse(&concept.path, &raw);
+        let parsed = parser.parse(path, &raw);
         lint_one(&parsed, &mut report);
     }
     report
@@ -293,40 +293,40 @@ where
 {
     let mut report = FormatReport::default();
 
-    for concept in repo.list() {
-        let raw = match repo.raw_bytes(&concept.path) {
+    for path in &repo.paths() {
+        let raw = match repo.raw_bytes(path) {
             Some(b) => b,
             None => {
-                report.skipped.push((concept.path.clone(), "raw bytes not found".to_string()));
+                report.skipped.push((path.clone(), "raw bytes not found".to_string()));
                 continue;
             }
         };
-        let parsed = parser.parse(&concept.path, &raw);
+        let parsed = parser.parse(path, &raw);
 
         // Skip if the parser says formatting is unsafe.
         if let Some(ref reason) = parsed.format_skip_reason {
             // Only report the skip for files that have some frontmatter (Python behaviour:
             // files with no frontmatter at all are silently skipped).
             if !parsed.concept_type.is_empty() || parsed.error.is_some() {
-                report.skipped.push((concept.path.clone(), reason.clone()));
+                report.skipped.push((path.clone(), reason.clone()));
             }
             continue;
         }
         if let Some(ref err) = parsed.error {
-            report.skipped.push((concept.path.clone(), err.clone()));
+            report.skipped.push((path.clone(), err.clone()));
             continue;
         }
 
         let new_bytes = match parser.canonicalize(&parsed) {
             Some(b) => b,
             None => {
-                report.skipped.push((concept.path.clone(), "canonicalize returned None".to_string()));
+                report.skipped.push((path.clone(), "canonicalize returned None".to_string()));
                 continue;
             }
         };
 
         // T2e: re-parse and verify that canonicalization preserved field values.
-        let re_parsed = parser.parse(&concept.path, &new_bytes);
+        let re_parsed = parser.parse(path, &new_bytes);
         if re_parsed.concept_type != parsed.concept_type
             || re_parsed.title != parsed.title
             || re_parsed.description != parsed.description
@@ -334,7 +334,7 @@ where
             || re_parsed.status != parsed.status
         {
             report.skipped.push((
-                concept.path.clone(),
+                path.clone(),
                 "reserialization would change values".to_string(),
             ));
             continue;
@@ -342,10 +342,10 @@ where
 
         // Only count/write if content actually changed.
         if new_bytes != raw {
-            report.changed.push(concept.path.clone());
+            report.changed.push(path.clone());
             if !check_only {
-                if let Err(e) = sink.write(&concept.path, &new_bytes) {
-                    report.skipped.push((concept.path.clone(), format!("write failed: {e}")));
+                if let Err(e) = sink.write(path, &new_bytes) {
+                    report.skipped.push((path.clone(), format!("write failed: {e}")));
                 }
             }
         }
@@ -435,11 +435,9 @@ mod tests {
     }
 
     impl ConceptRepository for FakeBundle {
-        fn list(&self) -> Vec<Concept> {
-            let mut v: Vec<Concept> = self.0.keys()
-                .map(|p| Concept { path: p.clone(), concept_type: String::new(), title: String::new() })
-                .collect();
-            v.sort_by(|a, b| a.path.cmp(&b.path));
+        fn paths(&self) -> Vec<String> {
+            let mut v: Vec<String> = self.0.keys().cloned().collect();
+            v.sort();
             v
         }
     }
@@ -1068,7 +1066,7 @@ mod tests {
     #[test]
     fn legacy_stubs_compile() {
         struct MinRepo;
-        impl ConceptRepository for MinRepo { fn list(&self) -> Vec<Concept> { vec![] } }
+        impl ConceptRepository for MinRepo { fn paths(&self) -> Vec<String> { vec![] } }
         struct MinIdx;
         impl touchstone_ports::SearchIndex for MinIdx { fn search(&self, _: &str) -> Vec<Concept> { vec![] } }
         assert_eq!(index_bundle(&MinRepo), 0);
