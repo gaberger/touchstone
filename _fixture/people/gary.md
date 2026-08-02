@@ -9,4 +9,4 @@ verified:
     at: 2026-07-15T09:00:00Z
 ---
 
-Working on [okf-brain](/projects/okf-brain.md).
+Working on [touchstone](/projects/touchstone.md).
