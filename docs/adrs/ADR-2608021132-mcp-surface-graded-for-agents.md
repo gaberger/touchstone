@@ -80,9 +80,10 @@ an agent that believes it can attest is more dangerous than one that cannot try.
   `new`, `show` and `lint` all call use cases; `search` calls `BundleIndex::search` directly
   because the whole pipeline lives inside the query and a wrapper would be ceremony.
   `parse.rs`, `walk.rs` and `render.rs` were deleted from the CLI adapter — 1,110 lines.
-- `FilteredSearch` and `search_bundle_full` are now dead: nothing implements the port outside a
-  test fake. Left in place rather than removed in the same change; recorded here so it is a
-  decision rather than an oversight.
+- ~~`FilteredSearch` and `search_bundle_full` are now dead~~ — removed. Deleting them also
+  removed four tests that only ever asserted the behaviour of their own fake, since
+  `search_bundle_full` was a one-line passthrough. The real coverage lives in
+  `touchstone-sqlite-index`, against actual SQL.
 
 **Mitigations:**
 - The conformance suite drives the binary black-box, so the CLI cannot regress silently while the
