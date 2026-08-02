@@ -42,6 +42,7 @@ pub const TOOL_NAMES: &[&str] = &[
     "touchstone_fmt",
     "touchstone_index",
     "touchstone_ingest",
+    "touchstone_init",
     "touchstone_lint",
     "touchstone_new",
     "touchstone_search",
@@ -253,6 +254,24 @@ pub fn all() -> Vec<Tool> {
                 "required": ["ingested", "skipped"]
             }),
             writes("Ingest source material", false, false),
+        ),
+        tool(
+            "touchstone_init",
+            "Create the bundle layout",
+            "Create the directory layout a bundle needs: the raw/ source layer and attest/ for \
+             signatures. Idempotent -- safe on a bundle that already exists, and it never touches \
+             concepts. Call this once before ingesting anything into a fresh bundle. Declaring \
+             who may sign, and wiring your MCP client, are human steps this cannot do for you.",
+            json!({ "type": "object", "additionalProperties": false }),
+            json!({
+                "type": "object",
+                "properties": {
+                    "created": { "type": "array", "items": { "type": "string" } },
+                    "concepts": { "type": "integer" }
+                },
+                "required": ["created", "concepts"]
+            }),
+            writes("Create the bundle layout", false, true),
         ),
         tool(
             "touchstone_lint",

@@ -182,7 +182,7 @@ fn a_single_call_describes_the_whole_surface() {
 #[test]
 fn write_tools_are_not_labelled_read_only() {
     let writers =
-        ["touchstone_index", "touchstone_new", "touchstone_fmt", "touchstone_export", "touchstone_ingest"];
+        ["touchstone_index", "touchstone_new", "touchstone_fmt", "touchstone_export", "touchstone_ingest", "touchstone_init"];
     for t in all() {
         let name = t.name.as_ref().to_string();
         let a = t.annotations.as_ref().unwrap_or_else(|| panic!("{name}: no annotations"));

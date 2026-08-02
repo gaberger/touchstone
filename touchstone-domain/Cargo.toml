@@ -3,5 +3,8 @@
 name = "touchstone-domain"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "touchstone: pure domain model. Zero dependencies"
 
 [dependencies]

@@ -3,6 +3,9 @@
 name = "touchstone-cli"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Provenance and portability for machine-written knowledge -- CLI and MCP server"
 
 # The crate is `touchstone-cli`; the shipped binary is plain `touchstone`.
 [[bin]]

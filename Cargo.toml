@@ -25,3 +25,11 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+# Inherited by every member crate, so metadata cannot drift between them.
+license = "MIT"
+repository = "https://github.com/gaberger/touchstone"
+homepage = "https://github.com/gaberger/touchstone"
+authors = ["Gary Berger"]
+rust-version = "1.85"
+keywords = ["knowledge-base", "mcp", "provenance", "okf", "agent"]
+categories = ["command-line-utilities", "text-processing"]

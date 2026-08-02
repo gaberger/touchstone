@@ -3,6 +3,9 @@
 name = "touchstone-mcp-adapter"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "touchstone: mcp-adapter adapter"
 
 [dependencies]
 touchstone-usecases = { path = "../../../touchstone-usecases" }

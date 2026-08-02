@@ -294,6 +294,16 @@ where
         }))
     }
 
+    fn t_init(&self) -> CallToolResult {
+        let mut created = Vec::new();
+        for rel in ["raw/.gitkeep", "attest/.gitkeep"] {
+            if !self.files.exists(rel) && self.files.write(rel, b"").is_ok() {
+                created.push(rel.to_string());
+            }
+        }
+        Self::ok(json!({ "created": created, "concepts": self.files.paths().len() }))
+    }
+
     fn t_ingest(&self, args: &Map<String, Value>) -> CallToolResult {
         let (Some(name), Some(content)) =
             (Self::str_arg(args, "name"), Self::str_arg(args, "content"))
@@ -461,6 +471,7 @@ where
             "touchstone_fmt" => self.t_fmt(args),
             "touchstone_index" => self.t_index(),
             "touchstone_ingest" => self.t_ingest(args),
+            "touchstone_init" => self.t_init(),
             "touchstone_unprocessed" => self.t_unprocessed(args),
             "touchstone_lint" => self.t_lint(args),
             "touchstone_new" => self.t_new(args),

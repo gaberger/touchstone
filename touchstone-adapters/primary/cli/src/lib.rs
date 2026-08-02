@@ -59,6 +59,7 @@ where
         // neither of which belongs in a command handler.
         Command::Mcp(_) => 0,
         Command::Verify => cmd::verify::run(files, parser, vc),
+        Command::Init => cmd::init::run(bundle, files),
         Command::Ingest(a) => cmd::ingest::run(a, files),
         Command::Unprocessed => cmd::unprocessed::run(files, parser),
         Command::Attest(a) => cmd::attest::run(a, files, parser, vc, clock),

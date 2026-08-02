@@ -99,6 +99,26 @@ TOUCHSTONE_BIN=/path/to/other/impl cargo test -p touchstone-conformance
 That is the property the differential used to provide, generalised: any implementation can be held
 to the same drills, not just the two that happened to exist.
 
+## Install
+
+```bash
+cargo install --git https://github.com/gaberger/touchstone touchstone-cli
+```
+
+Or take a prebuilt binary from [Releases](https://github.com/gaberger/touchstone/releases) —
+each is published with a `.sha256` and is only cut after the conformance suite passes on that
+platform.
+
+Then:
+
+```bash
+touchstone --bundle ~/brain init
+```
+
+`init` creates the layout and prints the two things it will not do for you: declaring who may
+sign, and wiring your MCP client. Writing into someone's `.mcp.json` from a CLI is
+presumptuous, and the one time it guesses wrong it has edited a config it does not own.
+
 ## A five-minute tour
 
 Every block below is real output, captured from a live run. Start with an empty directory.
@@ -245,6 +265,7 @@ For Claude Code, add to `.mcp.json`:
 | `touchstone stats` | Concepts by type, trust tier, status; link and broken-link counts |
 | `touchstone show <path>` | One concept's derived view. `--json` emits parsed frontmatter verbatim |
 | `touchstone mcp [--http ADDR]` | Serve the MCP tool surface. stdio by default; Streamable HTTP on request |
+| `touchstone init` | Create the bundle layout; print the setup that is yours to do |
 | `touchstone ingest <file>...` | Copy source documents into the immutable `raw/` layer, byte-exact |
 | `touchstone unprocessed` | Raw documents no concept cites yet — the work queue |
 | `touchstone attest <path>` | Sign a concept's existing `verified` claim. **CLI only** — agents may not attest |

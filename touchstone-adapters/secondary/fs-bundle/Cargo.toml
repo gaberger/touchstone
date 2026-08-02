@@ -3,6 +3,9 @@
 name = "touchstone-fs-bundle"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "touchstone: fs-bundle adapter"
 
 [dependencies]
 touchstone-ports = { path = "../../../touchstone-ports" }

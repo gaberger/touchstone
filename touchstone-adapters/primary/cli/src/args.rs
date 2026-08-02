@@ -41,6 +41,8 @@ pub enum Command {
     Mcp(McpArgs),
     /// Check that this bundle's `verified` claims are backed by valid signatures.
     Verify,
+    /// Create the bundle layout and print the setup you still have to do.
+    Init,
     /// Copy source documents into the immutable `raw/` layer.
     Ingest(IngestArgs),
     /// List raw documents no concept cites yet.
