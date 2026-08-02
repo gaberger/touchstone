@@ -559,6 +559,51 @@ be flaky on shared CI: re-indexing must leave exactly one FTS row per concept, F
 track their concept, and `remove` must take the FTS row with it. A stale row is the symptom
 that forced the scan.
 
+## E11 — A10 run, with heavy caveats: baseline 11/20, touchstone 18/20
+
+The pre-registered kill criterion — *if ≥15 of 20 questions are answered acceptably by
+`rg` + Obsidian, stop; the architecture is unjustified* — **is not met**.
+
+| arm | score |
+|---|---|
+| `rg` alone, no ranking | 4 / 20 |
+| `rg` + term-overlap ranking (a stand-in for Obsidian) | **11 / 20** |
+| touchstone | **18 / 20** |
+
+The first baseline was too weak to be honest: `rg -il` returns files in directory order, so
+taking the top 5 of an unranked list punishes it for something a human with Obsidian does not
+suffer. Ranking each file by how many distinct query terms it contains lifts it from 4 to 11 —
+and 11 is the number the verdict should rest on. Reported both, because quoting only the 4
+would have inflated the result by a factor of two.
+
+**What this is not.** Every caveat below is a reason to treat this as a pilot:
+
+- **The questions and the answer key were written by Claude**, at the user's instruction, over
+  a corpus Claude partly wrote. The bias runs toward touchstone.
+- **The scorer knows the corpus**, which inflates any judgement of "answered acceptably".
+- **"Answered" is a proxy** — an answer document in the arm's top 5 — not the human judgement
+  the protocol asks for.
+- **27 concepts.** PROTOTYPE.md warns that a corpus this thin produces absence-dominated
+  failures and cannot settle A10.
+- The ranked baseline is an *approximation* of Obsidian, not Obsidian.
+
+Mitigations that make the comparison worth something: the bulk of the corpus
+(DECISIONS, PROTOTYPE, VERSION-CONTROL, RUST-PATH, ADR-2608010900..0960) predates the session;
+the answer key was committed **before either arm ran**; and both arms faced identical
+questions, so the *comparison* holds even where the absolute number does not.
+
+**Where the gap comes from.** The baseline's failures are precision, not recall: with six
+OR-ed terms it matches most of a 27-document corpus and cannot order them, so the answer is
+present but buried. That is the *structure* failure the rubric predicts — questions like
+"which decisions are still proposed?" need a field, and grep cannot tell a `Status:` line from
+a mention of the word. Touchstone's two misses (Q3 parser-as-port, Q20 broken links) were both
+cases where the answer document ranked sixth or lower.
+
+**This does not substitute for the real A10.** Twenty questions the user actually wanted
+answered, over their own notes, remains the experiment that decides. What this run establishes
+is narrower and still useful: on a real corpus, with a fair baseline, the null hypothesis did
+not hold.
+
 ## Still open
 
 - **The trust invariant has no enforcement mechanism.** Signed commits and a CI gate are
@@ -569,8 +614,11 @@ that forced the scan.
   distributes the bytes can retract them, a CRDT least of all. Crypto-shredding is the only
   mechanism that changes it. The corporate boundary is justified by prefilter enforcement
   (E1), not by revocation — an earlier reading of this file said otherwise and was wrong.
-- **A10 / A3** (does it beat grep; will anyone write into it) — need the real corpus and
-  three weeks. Unchanged, and now the **only** things standing between this and a verdict.
+- **A10** — a caveated pilot run (E11) put the baseline at 11/20 against the 15/20 kill
+  threshold, and touchstone at 18/20. Questions written by Claude over a corpus it partly
+  wrote; the real experiment needs the user's questions over the user's notes.
+- **A3** (will anyone write into it) — untouched. Needs three weeks, and is now the single
+  largest unanswered risk.
 - **A6 on real embeddings with ANN** — before deleting the corporate seam for good.
 - ~~**T2 against the upstream sample bundles**~~ — run; see E4. A2 survives; A1 does not.
 - ~~**E4b**~~ — resolved; see E8. A1 narrows to what touchstone generates.
