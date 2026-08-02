@@ -567,7 +567,7 @@ mod tests {
             let limit = if q.limit == 0 { 10 } else { q.limit };
             self.hits.iter()
                 .filter(|h| q.concept_type.as_deref()
-                    .map(|t| h.concept.concept_type == t).unwrap_or(true))
+                    .map(|t| h.concept_type == t).unwrap_or(true))
                 .take(limit)
                 .cloned()
                 .collect()
@@ -662,14 +662,11 @@ mod tests {
     #[test]
     fn search_bundle_full_returns_hits() {
         let search = FakeSearch {
-            hits: vec![SearchHit {
-                concept: Concept { path: "notes/a.md".into(), concept_type: "Note".into(), title: "Alpha".into() },
-                via: SearchVia::Direct,
-            }],
+            hits: vec![SearchHit { path: "notes/a.md".into(), concept_type: "Note".into(), title: "Alpha".into(), description: String::new(), trust: Trust::default(), via: SearchVia::Direct }],
         };
         let result = search_bundle_full(&search, &SearchQuery { text: "alpha".into(), limit: 10, ..Default::default() });
         assert_eq!(result.hits.len(), 1);
-        assert_eq!(result.hits[0].concept.path, "notes/a.md");
+        assert_eq!(result.hits[0].path, "notes/a.md");
         assert_eq!(result.hits[0].via, SearchVia::Direct);
     }
 
@@ -677,15 +674,15 @@ mod tests {
     fn search_bundle_full_applies_type_filter() {
         let search = FakeSearch {
             hits: vec![
-                SearchHit { concept: Concept { path: "n/a.md".into(), concept_type: "Note".into(), title: "".into() }, via: SearchVia::Direct },
-                SearchHit { concept: Concept { path: "d/b.md".into(), concept_type: "Decision".into(), title: "".into() }, via: SearchVia::Direct },
+                SearchHit { path: "n/a.md".into(), concept_type: "Note".into(), title: "".into(), description: String::new(), trust: Trust::default(), via: SearchVia::Direct },
+                SearchHit { path: "d/b.md".into(), concept_type: "Decision".into(), title: "".into(), description: String::new(), trust: Trust::default(), via: SearchVia::Direct },
             ],
         };
         let result = search_bundle_full(&search, &SearchQuery {
             text: "q".into(), concept_type: Some("Note".into()), limit: 10, ..Default::default()
         });
         assert_eq!(result.hits.len(), 1);
-        assert_eq!(result.hits[0].concept.concept_type, "Note");
+        assert_eq!(result.hits[0].concept_type, "Note");
     }
 
     #[test]
@@ -699,7 +696,11 @@ mod tests {
     fn search_bundle_full_respects_limit() {
         let hits: Vec<SearchHit> = (0..20)
             .map(|i| SearchHit {
-                concept: Concept { path: format!("n/{i}.md"), concept_type: "Note".into(), title: format!("{i}") },
+                path: format!("n/{i}.md"),
+                concept_type: "Note".into(),
+                title: format!("{i}"),
+                description: String::new(),
+                trust: Trust::default(),
                 via: SearchVia::Direct,
             })
             .collect();
@@ -711,10 +712,7 @@ mod tests {
     #[test]
     fn search_bundle_full_link_via_preserved() {
         let search = FakeSearch {
-            hits: vec![SearchHit {
-                concept: Concept { path: "n/linked.md".into(), concept_type: "Note".into(), title: "".into() },
-                via: SearchVia::Link,
-            }],
+            hits: vec![SearchHit { path: "n/linked.md".into(), concept_type: "Note".into(), title: "".into(), description: String::new(), trust: Trust::default(), via: SearchVia::Link }],
         };
         let result = search_bundle_full(&search, &SearchQuery { text: "x".into(), limit: 10, ..Default::default() });
         assert_eq!(result.hits[0].via, SearchVia::Link);

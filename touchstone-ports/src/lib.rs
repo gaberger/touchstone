@@ -119,10 +119,98 @@ pub struct SearchQuery {
 pub enum SearchVia { Direct, Link }
 
 /// A ranked concept returned by `FilteredSearch`.
+///
+/// Carries the display fields directly rather than wrapping a `Concept`. There were two
+/// competing hit shapes — this one and a richer struct inside the CLI adapter — because the
+/// minimal `Concept` lacks the `description` and `trust` every result listing needs, so the
+/// adapter grew its own. A primary adapter defining the shape its index must return is
+/// backwards: the port is the contract, and both the CLI and the MCP surface render the same
+/// hits.
 #[derive(Debug, Clone)]
 pub struct SearchHit {
-    pub concept: Concept,
+    pub path: String,
+    pub concept_type: String,
+    pub title: String,
+    pub description: String,
+    pub trust: Trust,
     pub via: SearchVia,
+}
+
+// ── The index, write side ────────────────────────────────────────────────────
+
+/// Everything the index stores for one concept.
+///
+/// `fm_json` and `digest` are why this is richer than `ParsedConcept`'s query view: the first
+/// is the verbatim frontmatter projection T2c and T2d assert against, the second is the
+/// content fingerprint that makes indexing incremental.
+#[derive(Debug, Clone, Default)]
+pub struct IndexRecord {
+    pub path: String,
+    pub concept_type: String,
+    pub title: String,
+    pub description: String,
+    pub body: String,
+    pub tags: Vec<String>,
+    pub trust: Trust,
+    pub status: String,
+    pub stale_after: Option<String>,
+    /// Raw frontmatter serialised as JSON — the authoritative view for T2c.
+    pub fm_json: String,
+    pub conformant: bool,
+    pub error: Option<String>,
+    /// Content fingerprint, for incremental indexing.
+    pub digest: String,
+    /// Bundle-relative link targets resolved from body links.
+    pub links: Vec<String>,
+}
+
+/// Aggregate counts for `stats`.
+#[derive(Debug, Clone, Default)]
+pub struct BundleStats {
+    pub total: usize,
+    pub by_type: Vec<(String, usize)>,
+    pub by_trust: Vec<(String, usize)>,
+    pub by_status: Vec<(String, usize)>,
+    pub link_count: usize,
+    pub broken_link_count: usize,
+}
+
+/// The derived index: write, query, and summarise.
+///
+/// This trait lived in the CLI adapter as `CliStore`, implemented by a `FullStore` hand-rolled
+/// over raw rusqlite inside the composition root — while `touchstone-sqlite-index`, the adapter
+/// whose entire job this is, sat unreachable. It belongs here, so that every driving adapter
+/// gets the same index rather than the one its author happened to build.
+pub trait BundleIndex {
+    /// Bundle-relative path → content fingerprint, for skipping unchanged concepts.
+    fn prev_digests(&self) -> std::collections::HashMap<String, String>;
+
+    /// Insert or replace a concept. `known_paths` is the full current path set, so link
+    /// targets can be marked resolved or broken as they are written.
+    fn upsert(
+        &mut self,
+        rec: &IndexRecord,
+        known_paths: &std::collections::HashSet<String>,
+    ) -> Result<(), String>;
+
+    fn remove(&mut self, path: &str) -> Result<(), String>;
+
+    /// Re-resolve every edge target. A concept added late can resolve a link written earlier,
+    /// so this runs once after the walk rather than per-upsert.
+    fn reresolve(&mut self) -> Result<(), String>;
+
+    fn commit(&mut self) -> Result<(), String>;
+
+    /// Unresolved links. Broken links are legal per spec — they represent not-yet-written
+    /// knowledge — so this is a reported statistic, never an error.
+    fn broken_link_count(&self) -> usize;
+
+    fn search(&self, q: &SearchQuery) -> Result<Vec<SearchHit>, String>;
+
+    fn stats(&self) -> BundleStats;
+
+    /// Every path currently in the index, so the indexer can delete what has left the bundle.
+    fn all_paths(&self) -> Vec<String>;
 }
 
 /// Structured search with prefilter. Implemented by adapters holding a full-text index.
