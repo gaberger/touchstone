@@ -1,15 +1,15 @@
 //! `touchstone search <query>` — structured prefilter → BM25 → expansion → trust rank.
 
 use crate::args::SearchArgs;
-use crate::store::{CliSearchFilter, CliStore};
+use crate::store::{CliSearchFilter, CliStore, SearchVia, Trust};
 
 pub fn run(args: &SearchArgs, store: &dyn CliStore) -> i32 {
     let filter = CliSearchFilter {
-        query: args.query.clone(),
+        text: args.query.clone(),
         concept_type: args.concept_type.clone(),
         tag: args.tag.clone(),
         status: args.status.clone(),
-        trust: args.trust.clone(),
+        trust: args.trust.as_deref().and_then(Trust::from_label),
         limit: args.limit,
         expand: !args.no_expand,
     };
@@ -28,12 +28,12 @@ pub fn run(args: &SearchArgs, store: &dyn CliStore) -> i32 {
     }
 
     for h in &hits {
-        let mark = match h.trust.as_str() {
+        let mark = match h.trust.label() {
             "human" => "*",
             "machine" => "~",
             _ => " ",
         };
-        let via = if h.via == "direct" { "" } else { "  (via link)" };
+        let via = if h.via == SearchVia::Direct { "" } else { "  (via link)" };
         println!("{mark} {}{via}", h.path);
         println!("    {}  [{}]", h.title, h.concept_type);
         if !h.description.is_empty() {
@@ -93,8 +93,8 @@ mod tests {
             title: "X".into(),
             description: "".into(),
             concept_type: "Note".into(),
-            trust: "unattributed".into(),
-            via: "direct".into(),
+            trust: Trust::Unknown,
+            via: SearchVia::Direct,
         }]);
         assert_eq!(run(&make_args("x"), &store), 0);
     }

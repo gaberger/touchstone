@@ -120,7 +120,13 @@ fn rule_4b_primary_adapters_drive_the_use_cases() {
     // re-exported through touchstone-ports, and letting an adapter bind to the domain would put a second
     // door into the hexagon.
     let allowed = BTreeSet::from(["touchstone-usecases".to_string(), "touchstone-ports".to_string()]);
+    let deferred: BTreeSet<&str> = DEFERRED.iter().map(|(n, _)| *n).collect();
     for a in PRIMARY {
+        // A declared stub cannot drive anything yet. It is exempt only while it is listed in
+        // DEFERRED with a reason -- removing it from that list is what makes this rule bite.
+        if deferred.contains(format!("touchstone-{a}-adapter").as_str()) {
+            continue;
+        }
         let rel = format!("touchstone-adapters/primary/{a}");
         let deps = internal_deps_of(&rel);
         assert!(deps.is_subset(&allowed),
@@ -166,7 +172,14 @@ fn rule_6_cli_is_the_only_crate_that_imports_adapters() {
 /// Adapters that are deliberately not on the execution path yet, each gated on a named
 /// untested assumption. Being listed here is a claim that the crate is a stub by decision,
 /// not by neglect -- so the list is short, and every entry cites its gate.
-const DEFERRED: [(&str, &str); 3] = [
+const DEFERRED: [(&str, &str); 4] = [
+    (
+        "touchstone-git-attest",
+        "no command attests yet. Git is the attestation SINK (ADR-2608010930), written by the \
+         CRDT checkpoint on the write path -- and that path is itself gated on A7. The adapter \
+         is implemented and tested; it has no caller, which is the honest state rather than a \
+         reason to invent a `touchstone attest` command so this list can be shorter.",
+    ),
     ("touchstone-crdt-sync", "A7 -- CRDT sync is unproven; git remains the write path (ADR-2608010930)"),
     ("touchstone-embed-local", "A4 -- hybrid retrieval is unmeasured; BM25 alone until it is"),
     ("touchstone-mcp-adapter", "surface under construction"),
@@ -189,8 +202,11 @@ fn rule_6b_wiring_means_used_not_merely_declared() {
     // So: a non-deferred adapter must be named somewhere in the composition root OUTSIDE any
     // such touch function, and no touch function may exist at all.
     let main_rs = fs::read_to_string(workspace_root().join("touchstone-cli/src/main.rs")).expect("main.rs");
+    // Match the DEFINITION, not any mention: main.rs documents why the touch function was
+    // removed, and a bare substring check flagged its own explanation. A gate that fires on
+    // the comment describing the fix is a gate nobody will keep.
     assert!(
-        !main_rs.contains("_touch_adapters"),
+        !main_rs.contains("fn _touch_adapters"),
         "touchstone-cli/src/main.rs still defines a touch function -- adapters must be wired, not touched"
     );
 

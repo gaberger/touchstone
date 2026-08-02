@@ -101,7 +101,7 @@ fn concept_to_record(c: &RichConcept, digest: String) -> IndexRecord {
         description: c.description().to_string(),
         body: c.body.clone(),
         tags: c.tags(),
-        trust: c.trust().to_string(),
+        trust: touchstone_ports::Trust::from_label(c.trust()).unwrap_or_default(),
         status: c.status().to_string(),
         stale_after: c.stale_after(),
         fm_json: c.fm_json(),

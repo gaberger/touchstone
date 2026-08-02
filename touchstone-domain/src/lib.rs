@@ -23,6 +23,34 @@ pub struct Concept {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Trust { Verified, Attested, Generated, #[default] Unknown }
 
+impl Trust {
+    /// The stored/displayed name of the tier.
+    ///
+    /// The wire names predate the enum and are load-bearing: they are what the index column
+    /// holds, what `--trust` accepts on the CLI, and what `stats` prints. Deriving them here
+    /// rather than in each adapter is what stops a tier from being spelled two ways.
+    pub fn label(self) -> &'static str {
+        match self {
+            Trust::Verified => "human",
+            Trust::Attested => "attested",
+            Trust::Generated => "machine",
+            Trust::Unknown => "unattributed",
+        }
+    }
+
+    /// Parse a tier name. `None` for anything unrecognised, so a bad `--trust` value is a
+    /// usage error the caller can report rather than silently becoming "unattributed".
+    pub fn from_label(s: &str) -> Option<Trust> {
+        match s {
+            "human" => Some(Trust::Verified),
+            "attested" => Some(Trust::Attested),
+            "machine" => Some(Trust::Generated),
+            "unattributed" => Some(Trust::Unknown),
+            _ => None,
+        }
+    }
+}
+
 /// One entry in the `verified:` list. Used by the lint use case.
 #[derive(Debug, Clone, Default)]
 pub struct VerifiedEntry {

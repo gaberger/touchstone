@@ -536,6 +536,7 @@ dependencies = [
  "serde_yaml_ng",
  "tempfile",
  "touchstone-ports",
+ "touchstone-usecases",
 ]
 
 [[package]]

@@ -63,24 +63,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
 
 // ── Trust ⇄ stored string ────────────────────────────────────────────────────
 
-pub fn trust_str(t: Trust) -> &'static str {
-    match t {
-        Trust::Verified => "human",
-        Trust::Attested => "attested",
-        Trust::Generated => "machine",
-        Trust::Unknown => "unattributed",
-    }
-}
-
-pub fn trust_from_str(s: &str) -> Trust {
-    match s {
-        "human" => Trust::Verified,
-        "attested" => Trust::Attested,
-        "machine" => Trust::Generated,
-        _ => Trust::Unknown,
-    }
-}
-
 // ── The index ────────────────────────────────────────────────────────────────
 
 pub struct SqliteIndex {
@@ -190,7 +172,7 @@ impl BundleIndex for SqliteIndex {
                     rec.description,
                     rec.status,
                     rec.stale_after,
-                    trust_str(rec.trust),
+                    rec.trust.label(),
                     rec.conformant as i32,
                     rec.error,
                     rec.fm_json,
@@ -288,7 +270,7 @@ impl BundleIndex for SqliteIndex {
         }
         if let Some(t) = q.trust {
             where_extra.push_str(" AND c.trust = ?");
-            extra.push(trust_str(t).to_string());
+            extra.push(t.label().to_string());
         }
         if let Some(ref tag) = q.tag {
             where_extra
@@ -325,7 +307,7 @@ impl BundleIndex for SqliteIndex {
             .map_err(|e| e.to_string())?
             .flatten()
             .map(|(path, title, description, concept_type, trust, stale_after, bm)| {
-                let trust = trust_from_str(&trust);
+                let trust = Trust::from_label(&trust).unwrap_or_default();
                 let mut s = -bm * trust_boost(trust); // bm25(): lower is better
                 if stale_after.as_deref().is_some_and(|sa| sa < today.as_str()) {
                     s *= 0.60;
@@ -364,7 +346,7 @@ impl BundleIndex for SqliteIndex {
                         title: row.get(1)?,
                         description: row.get(2)?,
                         concept_type: row.get(3)?,
-                        trust: trust_from_str(&row.get::<_, String>(4)?),
+                        trust: Trust::from_label(&row.get::<_, String>(4)?).unwrap_or_default(),
                         via: SearchVia::Link,
                     })
                 }) {
@@ -593,7 +575,7 @@ mod tests {
     #[test]
     fn trust_strings_round_trip() {
         for t in [Trust::Verified, Trust::Attested, Trust::Generated, Trust::Unknown] {
-            assert_eq!(trust_from_str(trust_str(t)), t);
+            assert_eq!(Trust::from_label(t.label()), Some(t));
         }
     }
 

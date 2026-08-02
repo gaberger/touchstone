@@ -25,7 +25,7 @@ pub use args::Cli;
 pub use store::CliStore;
 
 use args::Command;
-use touchstone_ports::Clock;
+use touchstone_ports::{Clock, ConceptParser, ConceptRepository, RawStore};
 use std::path::Path;
 
 /// Dispatch parsed CLI arguments to the appropriate command handler.
@@ -35,13 +35,24 @@ use std::path::Path;
 /// `clock`  — UTC timestamp source (`Clock` from `touchstone-ports`).
 ///
 /// Returns a POSIX exit code: 0 = success, 1 = command-level error, 2 = usage.
-pub fn run(cli: &Cli, bundle: &Path, store: &mut dyn CliStore, clock: &dyn Clock) -> i32 {
+pub fn run<F, P>(
+    cli: &Cli,
+    bundle: &Path,
+    store: &mut dyn CliStore,
+    files: &F,
+    parser: &P,
+    clock: &dyn Clock,
+) -> i32
+where
+    F: ConceptRepository + RawStore,
+    P: ConceptParser,
+{
     match &cli.command {
         Command::Index(a) => cmd::index::run(bundle, store, a.quiet),
         Command::Search(a) => cmd::search::run(a, store),
         Command::New(a) => cmd::new::run(a, bundle, clock),
         Command::Fmt(a) => cmd::fmt::run(a, bundle),
-        Command::Lint => cmd::lint::run(bundle),
+        Command::Lint => cmd::lint::run(bundle, files, parser),
         Command::Export(a) => cmd::export::run(a, bundle, store),
         Command::Stats => cmd::stats::run(bundle, store),
         Command::Show(a) => cmd::show::run(a, bundle),
