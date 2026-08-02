@@ -108,13 +108,13 @@ Rust conformance suite reproduces all ten drills.
 
 | Phase | Description | Status | Verification |
 |-------|------------|--------|--------------|
-| P1 | Workspace scaffold; hex boundary rules pass with zero violations | Pending | code:Cargo.toml, test:hex analyze . |
-| P2 | `okf-domain` — pure, zero external crates | Pending | code:okf-domain/src/lib.rs, test:cargo test -p okf-domain |
-| P3 | `okf-ports` — traits only, imports domain for value types only | Pending | code:okf-ports/src/lib.rs, test:cargo check -p okf-ports |
-| P4 | `yaml-serde` adapter + **parser port-contract suite incl. merge-key behaviour** | Pending | code:okf-adapters/secondary/yaml-serde/src/lib.rs, test:cargo test -p okf-conformance parser_contract |
-| P5 | `fs-bundle` + `sqlite-index` adapters | Pending | code:okf-adapters/secondary/sqlite-index/src/lib.rs, test:cargo test -p sqlite-index |
-| P6 | `okf-cli` composition root; CLI-MCP parity per hex ADR-019 | Pending | code:okf-cli/src/main.rs, test:cargo test -p okf-cli parity |
-| P7 | Rust suite reproduces all 10 Python drills; retire the oracle | Pending | test:cargo test -p okf-conformance |
+| P1 | Workspace scaffold; hex boundary rules pass with zero violations | Completed | code:Cargo.toml, test:cargo test -p okf-cli --test architecture |
+| P2 | `okf-domain` — pure, zero external crates | Completed | code:okf-domain/src/lib.rs, test:cargo test -p okf-domain |
+| P3 | `okf-ports` — traits only, imports domain for value types only | Completed | code:okf-ports/src/lib.rs, test:cargo check -p okf-ports |
+| P4 | `yaml-serde` adapter + **parser port-contract suite incl. merge-key behaviour** | Pending — adapter done, contract suite outstanding (ADR-2608010950 P4) | code:okf-adapters/secondary/yaml-serde/src/lib.rs, test:cargo test -p okf-conformance parser_contract |
+| P5 | `fs-bundle` + `sqlite-index` adapters | Completed | code:okf-adapters/secondary/sqlite-index/src/lib.rs, test:cargo test -p okf-sqlite-index |
+| P6 | `okf-cli` composition root; CLI-MCP parity per hex ADR-019 | Pending — CLI complete, MCP surface is still a stub | code:okf-cli/src/main.rs, test:cargo test -p okf-cli parity |
+| P7 | Rust suite reproduces all 10 Python drills; retire the oracle | Completed — FINDINGS E6 | test:cargo test -p okf-conformance |
 
 ## References
 

@@ -1,5 +1,11 @@
 # The Rust path — measured, not asserted
 
+> **Resolved.** This document is the analysis that led to the port; it is kept as written, not
+> updated to match the outcome. The outcome: the port was taken, reached parity, and the Python
+> implementation this weighs against was deleted (FINDINGS E6). §6 was right about which asset
+> survived — the drills became `okf-conformance` and outlived both the language argument and the
+> implementation that motivated it.
+
 E3a and E3b were both **library** failures, not language failures. So the first question is
 whether Rust's libraries actually fix them or just relocate them. That is testable, and was
 tested (`serde_yaml_ng` 0.10.0, Rust 1.95.0, probe in the session scratchpad).

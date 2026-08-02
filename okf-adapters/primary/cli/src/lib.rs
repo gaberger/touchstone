@@ -44,5 +44,6 @@ pub fn run(cli: &Cli, bundle: &Path, store: &mut dyn CliStore, clock: &dyn Clock
         Command::Lint => cmd::lint::run(bundle),
         Command::Export(a) => cmd::export::run(a, bundle, store),
         Command::Stats => cmd::stats::run(bundle, store),
+        Command::Show(a) => cmd::show::run(a, bundle),
     }
 }

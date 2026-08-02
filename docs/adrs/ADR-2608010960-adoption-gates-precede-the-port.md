@@ -83,12 +83,12 @@ any outcome.
 
 | Phase | Description | Status | Verification |
 |-------|------------|--------|--------------|
-| P1 | Convert a real corpus into an OKF bundle | Pending | test:python -m brain --bundle <real> index |
+| P1 | Convert a real corpus into an OKF bundle | Pending | test:touchstone --bundle &lt;real&gt; index |
 | P2 | A10 — 20 questions against `rg` + Obsidian, failures classified recall/structure/absence | Pending | code:docs/experiments/a10-grep-baseline.md |
 | P3 | A3 — instrument `brain new`, three weeks, split by project/non-project days | Pending | code:docs/experiments/a3-adoption.md |
 | P4 | A4 — lexical vs hybrid on a frozen golden set built **before** tuning | Pending | code:docs/experiments/a4-hybrid.md |
 | P5 | A8 — ranking with and without the trust-tier boost | Pending | code:docs/experiments/a8-trust-rank.md |
-| P6 | 50k cold-index timing (currently unmeasured) | Pending | test:python -m brain --bundle _scale index |
+| P6 | 50k cold-index timing (currently unmeasured) | Pending | test:touchstone --bundle _scale index |
 | P7 | **Gate review** — proceed to ADR-2608010940 P2 only if A10 and A3 pass | Pending | code:docs/experiments/gate-review.md |
 
 ## References

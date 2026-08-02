@@ -44,43 +44,57 @@ tested; the two highest-risk assumptions are not yet answered.
 | [PROTOTYPE.md](PROTOTYPE.md) | How to falsify all of it. Assumption ledger ranked by risk, pre-registered kill criteria |
 | [FINDINGS.md](FINDINGS.md) | Experimental results. Three experiments so far; two overturned load-bearing claims |
 
-## Status: Rust, mid-port
+## Status: Rust, port complete
 
-**Touchstone is a Rust project.** The implementation lives in a 12-crate hexagonal workspace whose
-layering is enforced by Cargo itself — a boundary violation is a compile error, not a lint
-(`okf-cli/tests/architecture.rs` guards the dependency graph that makes that true).
+**Touchstone is a Rust project, and now only a Rust project.** The implementation lives in a
+13-crate hexagonal workspace whose layering is enforced by Cargo itself — a boundary violation is a
+compile error, not a lint (`okf-cli/tests/architecture.rs` guards the dependency graph that makes
+that true).
 
 | layer | crate | state |
 |---|---|---|
 | domain | `okf-domain` | types only, zero dependencies |
 | ports | `okf-ports` | 7 traits |
-| use cases | `okf-usecases` | in progress |
+| use cases | `okf-usecases` | **done** |
 | adapters | `okf-yaml-serde` FrontmatterParser | **done** — temporal values stay ISO 8601 strings (E3a) |
 | | `okf-fs-bundle` ConceptRepository | **done** — `log.md` is a concept, not a reserved name (E4a) |
 | | `okf-sqlite-index` SearchIndex | **done** — FTS5 + structured prefilter |
 | | `okf-git-attest` VersionControl | **done** |
 | | `crdt-sync`, `embed-local` | deferred — gated on A7 and A4, untested assumptions |
-| composition | `okf-cli` | in progress |
+| composition | `okf-cli` | **done** — full command surface |
+| conformance | `okf-conformance` | **done** — the drills, as a black-box gate |
 
 ```bash
-cargo check --workspace && cargo test --workspace
+cargo build --release --bin touchstone   # the conformance suite drives this binary
+cargo test --workspace                   # 171 tests
+bash tests/verify.sh                     # the standing acceptance gate
 ```
 
-### The Python prototype
+### The Python prototype is gone
 
-`touchstone/` is the original Stage 1 walking skeleton **being ported from**, and it is currently the
-only implementation that runs end to end. It stays until the Rust CLI reaches parity, because it is
-the **differential oracle**: the Rust port is checked against it byte-for-byte, and the case for Rust
-in [RUST-PATH.md](RUST-PATH.md) is a measurement of one against the other. Where they disagree,
-[FINDINGS.md](FINDINGS.md) records which is wrong — E3a and E4a are both defects in the Python one.
+`touchstone/` was the original Stage 1 walking skeleton, kept as a **differential oracle** while the
+port was in flight: the Rust output was checked against it byte-for-byte on every bundle. It was
+deleted once the port reached parity and the differential ran clean, which is exactly the condition
+this README committed to. [FINDINGS.md E6](FINDINGS.md) records the deletion and what replaced it.
+
+What the oracle was for did not go away, so it was moved rather than dropped:
+
+| the oracle provided | now provided by |
+|---|---|
+| the ten drills | `okf-conformance`, driving the binary as a black box |
+| a second opinion on ambiguous bytes | the drills assert the property directly instead of by comparison |
+| E4a (`log.md` is a concept) | an assertion in `okf-conformance/tests/fixture.rs` |
+| E4b (A1 fails on concept-free dirs) | a recorded known-defect in `okf-conformance/tests/drills.rs` |
+
+Because the suite names no `okf-*` crate — a rule the architecture test enforces — it can gate an
+implementation it did not compile:
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install pyyaml
-.venv/bin/python tests/make_fixture.py _fixture && .venv/bin/python -m touchstone --bundle _fixture index
-.venv/bin/python tests/drills.py    # T1 rebuild, T2 round-trip, T6 service-death
+TOUCHSTONE_BIN=/path/to/other/impl cargo test -p okf-conformance
 ```
 
-It is deleted, not deprecated, once `touchstone index` runs in Rust and the differential run is clean.
+That is the property the differential used to provide, generalised: any implementation can be held
+to the same drills, not just the two that happened to exist.
 
 ## Commands
 
@@ -93,6 +107,7 @@ It is deleted, not deprecated, once `touchstone index` runs in Rust and the diff
 | `touchstone fmt [--check]` | Canonicalize frontmatter. **Refuses** files it cannot safely reproduce |
 | `touchstone export <dir>` | Write raw bytes back out. Byte-exact by construction |
 | `touchstone stats` | Concepts by type, trust tier, status; link and broken-link counts |
+| `touchstone show <path>` | One concept's derived view. `--json` emits parsed frontmatter verbatim |
 
 Filters: `--type`, `--tag`, `--status`, `--trust`, `--limit`, `--no-expand`.
 
@@ -104,7 +119,8 @@ drop an unknown key — the failure mode is structurally impossible rather than 
 tested for.
 
 **Everything above the bundle is derived and disposable.** Delete `.touchstone/` and every
-`index.md`, run `touchstone index`, and the result is byte-identical. T1 enforces this.
+`index.md`, run `touchstone index`, and the result is byte-identical. T1 enforces this — and
+currently falsifies it in one recorded case, E4b below.
 
 **The spec's tolerance is honored, not narrowed.** Unknown `type` values, unknown
 frontmatter keys, and broken links are all preserved and indexed — the spec requires
@@ -117,10 +133,19 @@ ranks on this. No agent may ever write `verified`.
 
 ## What is tested, and what is not
 
-Passing (10/10 drills): index rebuild determinism, idempotence, byte-exact round-trip
-through CRLF / unicode paths / YAML anchors / multiline scalars, unknown key and type
-preservation, broken-link tolerance, ISO 8601 preservation, formatter safety, and recovery
-of the whole index from files alone.
+Passing — 23 conformance tests, every drill against every bundle (the adversarial `_fixture`
+plus four vendored third-party ones): index rebuild determinism, idempotence, byte-exact
+round-trip through CRLF / unicode paths / YAML anchors / multiline scalars, unknown key and
+type preservation, broken-link tolerance, ISO 8601 preservation, formatter safety, the trust
+invariant, and recovery of the whole index from files alone.
+
+Failing, recorded, undecided:
+
+- **E4b** — `acme_retail/attesters/` holds no concepts, so the `index.md` upstream ships for
+  it cannot be regenerated. A1 — *everything above the bundle is derived* — is therefore
+  false as stated. Either `index` reconstructs concept-free directories, or A1 narrows to
+  directories that contain concepts. The gate reports this as `XFAIL` on every run rather
+  than hiding it, and will fail loudly if it silently starts passing.
 
 Not tested, and load-bearing:
 

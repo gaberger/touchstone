@@ -5,19 +5,19 @@ import { spawnSync } from "node:child_process";
  *
  * Deterministic on purpose: this is a CODE skill, not an agent skill, so the hourly run costs no
  * tokens and cannot hallucinate a green result. The gate itself (tests/verify.sh) owns what "correct"
- * means -- build, tests, hex analyze, both drill implementations, and the Rust/Python differential
- * over every bundle. This skill just runs it and reports.
+ * means -- build, tests, hex analyze, the conformance suite over every bundle, and byte-exact export.
+ * This skill just runs it and reports.
  *
  * Failure summaries carry the failing lines, because "the gate failed" in a notification is useless
- * at 3am and "unadjudicated divergence: rust 9 vs python 9" tells you what happened.
+ * at 3am and "acme_retail: index.md set changed" tells you what happened.
  */
 const REPO = process.env.TOUCHSTONE_REPO ?? "/Volumes/SSD/Development/okf";
 
 export default {
   name: "touchstone-verify",
   description:
-    "Run Touchstone's acceptance gate: build, tests, hex analyze, drills (python+rust), and the " +
-    "Rust/Python differential across all bundles. Deterministic, no LLM.",
+    "Run Touchstone's acceptance gate: build, tests, hex analyze, the okf-conformance drills " +
+    "across all bundles, and byte-exact export. Deterministic, no LLM.",
   match: (t) => /touchstone.*(verify|gate|check)|verify.*touchstone/i.test(t.spec.goal),
 
   async run() {

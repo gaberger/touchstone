@@ -365,6 +365,50 @@ checking it produced a false alarm from a badly-chosen grep.
 it is useful as a second opinion; T2b/T2d/T2e would need expressing through the CLI to be checked
 identically against both, which is the only reason to keep it after that.
 
+## E6 — the oracle is deleted, and the drills outlive it
+
+The condition E5a named was met: T2b, T2d and T2e are now expressed through the CLI, so nothing about
+conformance depends on being able to call a Python function. The prototype was deleted — 1,417 lines
+across `touchstone/`, `tests/drills.py`, and `tests/make_fixture.py`.
+
+Deleting an implementation is easy. Deleting one **without losing what it taught you** is the part
+worth recording, because the oracle was carrying four distinct things and only one of them was code.
+
+| what the oracle carried | where it went |
+|---|---|
+| the ten drills | `okf-conformance`, driving the binary as a black box |
+| a second opinion on ambiguous bytes | gone, deliberately — see below |
+| E4a (`log.md` is a concept, not a reserved name) | an assertion, `okf-conformance/tests/fixture.rs` |
+| E4b (A1 fails on concept-free directories) | a recorded known-defect, `okf-conformance/tests/drills.rs` |
+
+**The second opinion is the real loss, and it is worth being honest about it.** A differential test
+answers "do two independent readings of these bytes agree?", which is a question no single
+implementation can ask itself. What replaces it is weaker in one way and stronger in another: the
+drills now assert each property *directly* rather than by comparison, so they still catch a
+regression, but they can no longer surface a disagreement nobody thought to look for. E3a and E4a
+were both found that way. Nothing in the current suite would have found them.
+
+What partially compensates: `okf-conformance` names no `okf-*` crate — enforced as architecture rule
+7 — so it drives the binary rather than the library. `TOUCHSTONE_BIN=… cargo test -p okf-conformance`
+holds *any* implementation to the same drills. The differential could compare two implementations;
+this can gate arbitrarily many, including ones that do not exist yet. That is a fair trade for a
+project whose stated asset is the format rather than the code, but it is a trade, not a free win.
+
+**On E4b.** The suite records it as an expected failure rather than fixing it, which needs
+justifying, because an expected-failure list is one careless commit away from being an ignore-list.
+Two things keep it honest: the failure must still reproduce *in the recorded shape* (a different T1
+failure on `acme_retail` fails the gate), and if it ever **stops** reproducing the gate fails too,
+on the grounds that FINDINGS would then be asserting something false. It is not fixed because
+fixing it means deciding what `index.md` should contain for a directory holding no concepts — a
+reading of the spec, not a bug fix, and one nobody has made yet.
+
+**One thing the port did not carry over, noticed while writing the trust drill:** `Trust::Attested`
+exists in `okf-domain` and is never derived by anything. Both implementations only ever produced
+`human` / `machine` / `unattributed`, so this is not a port defect — it is a documented tier
+(`verified` > `attested` > `generated`) with no derivation rule behind it. Left alone; recorded here
+because a trust tier that cannot be reached is either dead code or a missing rule, and which one it
+is has not been decided.
+
 ## Still open
 
 - **Revocation** — unaddressed by any experiment, and the surviving argument for a
@@ -373,4 +417,8 @@ identically against both, which is the only reason to keep it after that.
   three weeks. Unchanged, and now the **only** things standing between this and a verdict.
 - **A6 on real embeddings with ANN** — before deleting the corporate seam for good.
 - ~~**T2 against the upstream sample bundles**~~ — run; see E4. A2 survives; A1 does not.
+- **E4b** — still undecided, and now the only recorded defect in the gate. Either `index`
+  reconstructs `index.md` for concept-free directories, or A1 narrows to directories that
+  contain concepts. Until then A1 is false as stated and the gate says so on every run.
+- **`Trust::Attested` is unreachable** — a documented tier with no derivation rule (E6).
 - **Scale** — the fixture is 25 concepts. Nothing here says anything about 50k.

@@ -35,6 +35,8 @@ pub enum Command {
     Export(ExportArgs),
     /// Bundle summary.
     Stats,
+    /// Print one concept's derived view (parsed frontmatter with `--json`).
+    Show(ShowArgs),
 }
 
 #[derive(Args, Debug)]
@@ -80,6 +82,15 @@ pub struct NewArgs {
 pub struct FmtArgs {
     #[arg(long)]
     pub check: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct ShowArgs {
+    /// Bundle-relative concept path, e.g. `notes/why-files-win.md`.
+    pub path: String,
+    /// Emit machine-readable JSON, with frontmatter verbatim.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args, Debug)]

@@ -139,6 +139,22 @@ fn rule_6_cli_is_the_only_crate_that_imports_adapters() {
 }
 
 #[test]
+fn rule_7_conformance_names_no_internal_crate() {
+    // The conformance suite must not be able to reach the implementation it is testing. A suite
+    // that imports `okf-domain` could assert against the same code that produced the answer, and
+    // would pass by construction; one that imports any adapter could only ever gate THIS build.
+    //
+    // Naming nothing internal is what makes the suite a black-box gate over the `touchstone`
+    // binary, so the same drills can be pointed at a future rewrite -- or at the upstream
+    // reference_agent -- via TOUCHSTONE_BIN (ADR-2608010950).
+    let internal = internal_deps_of("okf-conformance");
+    assert!(
+        internal.is_empty(),
+        "okf-conformance must name no okf-* crate -- it gates the binary as a black box, found {internal:?}"
+    );
+}
+
+#[test]
 fn every_workspace_member_is_covered_by_a_rule() {
     // Guards the guard: a new crate added to the workspace without a rule would otherwise be
     // silently unchecked, which is exactly how a layering gate rots.
@@ -149,8 +165,9 @@ fn every_workspace_member_is_covered_by_a_rule() {
         .filter(|l| l.starts_with('"') && l.ends_with("\","))
         .map(|l| l.trim_matches(|c| c == '"' || c == ',').to_string())
         .collect();
-    let mut known: BTreeSet<String> = ["okf-domain", "okf-ports", "okf-usecases", "okf-cli"]
-        .iter().map(|s| s.to_string()).collect();
+    let mut known: BTreeSet<String> =
+        ["okf-domain", "okf-ports", "okf-usecases", "okf-cli", "okf-conformance"]
+            .iter().map(|s| s.to_string()).collect();
     known.extend(SECONDARY.iter().map(|a| format!("okf-adapters/secondary/{a}")));
     known.extend(PRIMARY.iter().map(|a| format!("okf-adapters/primary/{a}")));
     assert_eq!(declared, known, "workspace members and architecture rules have diverged");

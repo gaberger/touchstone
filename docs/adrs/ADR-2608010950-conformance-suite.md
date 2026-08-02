@@ -1,6 +1,6 @@
 # ADR-2608010950: A language-independent OKF conformance suite is the portable asset
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-08-01
 **Epoch:** stage-1-skeleton
 **Drivers:** A Rust port is authorized. The measured merge-key divergence between two conformant parsers proves that "reimplement and hope it behaves the same" silently flips a trust tier.
@@ -83,13 +83,34 @@ bundle plus expected outputs — and require every implementation to pass it.
 
 | Phase | Description | Status | Verification |
 |-------|------------|--------|--------------|
-| P1 | Extract the Python fixture + expectations into a language-neutral `conformance/` data directory | Pending | code:conformance/fixture/, test:python tests/drills.py |
-| P2 | `okf-conformance` crate depending on ports only; T1, T1b, T6 | Pending | code:okf-conformance/tests/rebuild.rs, test:cargo test -p okf-conformance rebuild |
-| P3 | T2a–T2e including the parser contract suite | Pending | code:okf-conformance/tests/roundtrip.rs, test:cargo test -p okf-conformance roundtrip |
+| P1 | The fixture bundle is language-neutral checked-in data, not a generator | Completed | code:_fixture/, test:cargo test -p okf-conformance --test fixture the_adversarial_corpus_is_actually_present |
+| P2 | `okf-conformance` crate; T1, T1b, T6 | Completed | code:okf-conformance/tests/drills.rs, test:cargo test -p okf-conformance --test drills |
+| P3 | T2a–T2e | Completed | code:okf-conformance/tests/drills.rs, test:cargo test -p okf-conformance --test drills |
 | P4 | Declared-divergence table per parser adapter (merge keys, comments, anchors) | Pending | code:okf-conformance/tests/parser_contract.rs, test:cargo test -p okf-conformance parser_contract |
-| P5 | Run T2 against the three upstream sample bundles | Pending | code:okf-conformance/tests/upstream.rs, test:cargo test -p okf-conformance upstream |
-| P6 | T6 via the upstream `reference_agent` CLI | Pending | test:cargo test -p okf-conformance reference_agent |
-| P7 | CI gate on every push | Pending | code:.github/workflows/conformance.yml, test:cargo test -p okf-conformance |
+| P5 | Run every drill against the upstream sample bundles, not just T2 | Completed | code:okf-conformance/src/lib.rs all_bundles(), test:cargo test -p okf-conformance |
+| P6 | T6 via the upstream `reference_agent` CLI | Pending — unblocked | test:TOUCHSTONE_BIN=<reference_agent> cargo test -p okf-conformance |
+| P7 | CI gate on every push | Pending | code:.github/workflows/conformance.yml, test:bash tests/verify.sh |
+
+**Deviations from the decision as written, and why.**
+
+*"`okf-conformance` is its own crate, depending on ports only."* It depends on **nothing**
+internal — not even ports. Depending on ports would mean the suite links the same value types the
+implementation uses, so a shared misreading could not be detected, and it could only ever gate a
+Rust build. Driving the binary instead makes `TOUCHSTONE_BIN=… cargo test -p okf-conformance` hold
+*any* implementation to the drills, which is what P6 needs and what the decision was reaching for.
+Enforced as architecture rule 7.
+
+*P1 said "extract the fixture into a data directory."* `_fixture/` already was checked-in data, so
+extraction was a no-op; what was removed is the **generator** (`tests/make_fixture.py`). Deleting it
+found that generator and committed fixture had already drifted, which is the argument for data over
+code stated better than the ADR stated it.
+
+*"T2 additionally runs against the upstream sample bundles."* Every drill now runs against every
+bundle, not just T2. That is what surfaced E4b — a bundle-specific falsification of A1 that a
+fixture-only T1 could never have found.
+
+*"The Python implementation remains the oracle until the Rust suite reproduces all ten drills."*
+Satisfied, then acted on: all ten are reproduced and the oracle is deleted (FINDINGS E6).
 
 ## References
 

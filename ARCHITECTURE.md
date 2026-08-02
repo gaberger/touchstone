@@ -5,9 +5,9 @@
 > Architecture Decision Records in [`docs/adrs/`](docs/adrs/) — append-only, never edited
 > to match the present.
 >
-> **Status:** Stage 1 walking skeleton exists in Python and passes 10/10 conformance
-> drills. The Rust workspace described below is **proposed, not built** — it is what the
-> ADRs authorize hex to construct. Research that produced these decisions:
+> **Status:** Built. The Rust workspace described below exists and passes its own conformance
+> suite; the Python walking skeleton it was ported from has been deleted (FINDINGS E6). Research
+> that produced these decisions:
 > [DECISIONS.md](DECISIONS.md), [FINDINGS.md](FINDINGS.md), [PROTOTYPE.md](PROTOTYPE.md),
 > [VERSION-CONTROL.md](VERSION-CONTROL.md), [RUST-PATH.md](RUST-PATH.md).
 
@@ -75,6 +75,10 @@ okf-adapters/
     embed-local/     Embedder           ← fastembed (OPTIONAL — gated on A4)
 
 okf-cli/             composition root. The ONLY crate that imports adapters.
+
+okf-conformance/     the drills, as a black-box gate over the `touchstone` BINARY.
+                     Names no okf-* crate at all (rule 7), so it can gate an
+                     implementation it did not compile: TOUCHSTONE_BIN=… cargo test.
 ```
 
 ### Why the frontmatter parser is a port
@@ -133,9 +137,10 @@ Every load-bearing claim, and whether it is measured:
 
 | Claim | Status | Evidence |
 |---|---|---|
-| Index is byte-identically rebuildable | **measured** | T1, 10/10 drills |
-| Round-trip is byte-exact (CRLF, unicode, anchors) | **measured** | T2a |
+| Index is byte-identically rebuildable | **measured, one FALSIFYING case** | T1 across 5 bundles; E4b holds on `acme_retail` |
+| Round-trip is byte-exact (CRLF, unicode, anchors) | **measured** | T2a, all 5 bundles |
 | Unknown types/keys and broken links preserved | **measured** | T2c |
+| Trust tier is stable across a canonical rewrite | **measured** | T2b |
 | Post-filter authz sufficient at K≥500 | **measured** | E1, recall ≥0.95 all configs |
 | Git merges OKF frontmatter without corruption | **measured** | E2, 0 silent failures / 400 trials |
 | PyYAML breaks ISO 8601; serde_yaml_ng does not | **measured** | E3a |
@@ -149,6 +154,12 @@ Every load-bearing claim, and whether it is measured:
 The last two outrank everything buildable. A brain nobody writes to is an empty database
 with good latency.
 
+The first row is the one to read twice. "Byte-identically rebuildable" is the claim the whole
+derived plane rests on, and it is **false in one measured case** — a directory holding no
+concepts, whose `index.md` therefore cannot be regenerated (E4b). It is recorded rather than
+fixed because fixing it means deciding what the file should contain, which is a spec reading,
+not a bug fix. The gate prints it on every run.
+
 ## Hexagonal rules (enforced by `hex analyze .`)
 
 1. `okf-domain/` imports only `okf-domain/`.
@@ -157,9 +168,15 @@ with good latency.
 4. `adapters/primary/` and `adapters/secondary/` import `okf-ports/` only.
 5. Adapters NEVER import other adapters.
 6. `okf-cli/` composition root is the ONLY file that imports adapters.
+7. `okf-conformance/` imports **no** internal crate — it drives the built binary.
 
 Rule 5 is what makes the parser swap, the git swap, and the CRDT addition independent
 merge units — three agents, three worktrees, no coordination.
+
+Rule 7 is what stops the conformance suite from grading its own homework. A suite that
+imported `okf-domain` could assert against the very code that produced the answer and would
+pass by construction; one that imported an adapter could only ever gate *this* build. Naming
+nothing internal is what lets the same drills be pointed at a future rewrite.
 
 ## Build & test
 
@@ -168,14 +185,23 @@ cargo check --workspace && cargo test --workspace
 ```
 
 Conformance — the portable asset, and the gate any implementation must pass
-([ADR-2608010950](docs/adrs/ADR-2608010950-conformance-suite.md)):
+([ADR-2608010950](docs/adrs/ADR-2608010950-conformance-suite.md)). It drives the built binary,
+so build first; a missing binary is a hard error, never a skip, because a gate that quietly
+skips reports green while asserting nothing:
 
 ```bash
+cargo build --release --bin touchstone
 cargo test -p okf-conformance
+
+# ...or hold a different implementation to the same drills:
+TOUCHSTONE_BIN=/path/to/other/impl cargo test -p okf-conformance
 ```
 
-The Python reference implementation and its 10 drills remain the oracle until the Rust
-suite reproduces them.
+The whole gate — build, tests, layering, conformance, byte-exact export over every bundle:
+
+```bash
+bash tests/verify.sh
+```
 
 ## Decision governance
 

@@ -16,15 +16,26 @@ weave loop --skill touchstone-verify --interval 1h "verify touchstone" --notify 
 ## What it guards
 
 Build, `cargo test --workspace`, `hex analyze` (asserting it *recognised* the layout, not merely that
-it exited 0), both drill implementations, and the Rust/Python differential across `_fixture` and every
-bundle in `_upstream/`.
+it exited 0), the `okf-conformance` drills across `_fixture` and every bundle in `_upstream/`,
+byte-exact export, and a check that no tracked Python has reappeared.
 
-Adjudicated divergences live in `KNOWN_DIVERGENCE` inside `verify.sh`. An unlisted divergence fails.
-So does an expected one that disappears — that would mean the Rust side stopped fixing a defect the
-Python side still has.
+Adjudicated defects live in `KNOWN_DEFECTS` inside `okf-conformance/tests/drills.rs`, and the gate
+prints them as `XFAIL` on every run. An unlisted failure fails the gate. So does a listed one that
+*disappears* — that means FINDINGS.md is now asserting something false and needs closing out.
 
-## On deleting the Python prototype
+## On the Python prototype
 
-This gate is the main reason to keep it. Once `touchstone` is the only implementation there is no
-differential, and this becomes build + tests + architecture + drills. That is a real loss of signal,
-so retiring the prototype should be a decision, not a cleanup.
+It is gone (FINDINGS E6), and this gate is where the cost landed. While it existed, the gate ran a
+true differential: two implementations over the same bytes, which is the only way to catch a
+disagreement nobody thought to look for — that is how E3a and E4a were found.
+
+What replaced it is not equivalent, and the README does not pretend otherwise. The drills now assert
+each property directly, so regressions are still caught; novel disagreements are not. The partial
+compensation is that `okf-conformance` names no `okf-*` crate, so it drives the *binary*:
+
+```bash
+TOUCHSTONE_BIN=/path/to/other/impl cargo test -p okf-conformance
+```
+
+One differential compared two implementations. This gates any number of them, including ones that do
+not exist yet.
