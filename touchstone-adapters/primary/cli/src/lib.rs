@@ -16,16 +16,13 @@
 
 pub mod args;
 pub mod cmd;
-pub mod parse;
-pub mod render;
 pub mod store;
-pub mod walk;
 
 pub use args::Cli;
 pub use store::CliStore;
 
 use args::Command;
-use touchstone_ports::{Clock, ConceptParser, ConceptRepository, RawStore};
+use touchstone_ports::{Clock, ConceptParser, ConceptRepository, ConceptSink, RawStore};
 use std::path::Path;
 
 /// Dispatch parsed CLI arguments to the appropriate command handler.
@@ -42,20 +39,21 @@ pub fn run<F, P>(
     files: &F,
     parser: &P,
     clock: &dyn Clock,
+    make_sink: &dyn Fn(&std::path::Path) -> Box<dyn ConceptSink>,
 ) -> i32
 where
-    F: ConceptRepository + RawStore,
+    F: ConceptRepository + RawStore + ConceptSink,
     P: ConceptParser,
 {
     match &cli.command {
-        Command::Index(a) => cmd::index::run(bundle, store, a.quiet),
+        Command::Index(a) => cmd::index::run(bundle, store, files, parser, a.quiet),
         Command::Search(a) => cmd::search::run(a, store),
-        Command::New(a) => cmd::new::run(a, bundle, clock),
-        Command::Fmt(a) => cmd::fmt::run(a, bundle),
+        Command::New(a) => cmd::new::run(a, parser, files, clock),
+        Command::Fmt(a) => cmd::fmt::run(a.check, files, parser),
         Command::Lint => cmd::lint::run(bundle, files, parser),
-        Command::Export(a) => cmd::export::run(a, bundle, store),
+        Command::Export(a) => cmd::export::run(a, files, make_sink),
         Command::Stats => cmd::stats::run(bundle, store),
-        Command::Show(a) => cmd::show::run(a, bundle),
+        Command::Show(a) => cmd::show::run(a, files, parser),
         // Served by the composition root: it needs an async runtime and the full adapter set,
         // neither of which belongs in a command handler.
         Command::Mcp(_) => 0,

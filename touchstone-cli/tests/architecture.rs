@@ -134,7 +134,39 @@ fn rule_4b_primary_adapters_drive_the_use_cases() {
         assert!(deps.contains("touchstone-usecases"),
             "touchstone-{a}-adapter must DRIVE the use cases, not reimplement them -- \
              a primary adapter that does not depend on touchstone-usecases is a second implementation");
+
+        // ...and the dependency must be USED. A declared-but-unimported crate is the same
+        // vacuous pass as `_touch_adapters()`: the rule reads green while the adapter carries
+        // its own copy of everything. Counted, not merely present, so deleting the last real
+        // call site fails the gate instead of silently weakening it.
+        let src_dir = workspace_root().join(&rel).join("src");
+        // One `use touchstone_usecases::{...}` legitimately imports many functions, so the
+        // threshold is presence, not frequency. This catches the vacuous case -- a declared
+        // dependency nothing imports -- and nothing subtler. What actually proves the two
+        // adapters share behaviour is the byte-identity drill in the conformance suite, which
+        // runs both and diffs the result; grep cannot substitute for that.
+        let uses = count_uses(&src_dir, "touchstone_usecases");
+        assert!(
+            uses >= 1,
+            "touchstone-{a}-adapter names touchstone-usecases in Cargo.toml but never imports \
+             it. Declaring the dependency is not driving the use cases."
+        );
     }
+}
+
+/// Count references to `needle` across every `.rs` file under `dir`.
+fn count_uses(dir: &Path, needle: &str) -> usize {
+    let mut n = 0;
+    let Ok(entries) = fs::read_dir(dir) else { return 0 };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            n += count_uses(&p, needle);
+        } else if p.extension().is_some_and(|e| e == "rs") {
+            n += fs::read_to_string(&p).map(|s| s.matches(needle).count()).unwrap_or(0);
+        }
+    }
+    n
 }
 
 #[test]
@@ -172,7 +204,7 @@ fn rule_6_cli_is_the_only_crate_that_imports_adapters() {
 /// Adapters that are deliberately not on the execution path yet, each gated on a named
 /// untested assumption. Being listed here is a claim that the crate is a stub by decision,
 /// not by neglect -- so the list is short, and every entry cites its gate.
-const DEFERRED: [(&str, &str); 4] = [
+const DEFERRED: [(&str, &str); 3] = [
     (
         "touchstone-git-attest",
         "no command attests yet. Git is the attestation SINK (ADR-2608010930), written by the \
@@ -182,7 +214,6 @@ const DEFERRED: [(&str, &str); 4] = [
     ),
     ("touchstone-crdt-sync", "A7 -- CRDT sync is unproven; git remains the write path (ADR-2608010930)"),
     ("touchstone-embed-local", "A4 -- hybrid retrieval is unmeasured; BM25 alone until it is"),
-    ("touchstone-mcp-adapter", "surface under construction"),
 ];
 
 #[test]

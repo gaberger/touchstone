@@ -218,3 +218,20 @@ pub trait BundleIndex {
 pub trait FilteredSearch {
     fn search_filtered(&self, q: &SearchQuery) -> Vec<SearchHit>;
 }
+
+// ── Blanket impls for owned/boxed port objects ───────────────────────────────
+
+/// A boxed sink is a sink.
+///
+/// The composition root builds an export destination only after arguments are parsed, so it
+/// hands the command a `Box<dyn ConceptSink>`. Without this the use cases — generic over
+/// `W: ConceptSink` — could not accept one, and the command would have to reach for the
+/// filesystem itself, which rule 5 forbids and which is how duplicate implementations start.
+impl<T: ConceptSink + ?Sized> ConceptSink for Box<T> {
+    fn write(&self, path: &str, raw: &[u8]) -> Result<(), String> {
+        (**self).write(path, raw)
+    }
+    fn exists(&self, path: &str) -> bool {
+        (**self).exists(path)
+    }
+}

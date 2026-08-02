@@ -1,3 +1,11 @@
+//! `touchstone search <query>` — structured prefilter, BM25, one graph hop, trust rank.
+//!
+//! Calls `BundleIndex::search` directly rather than through a use case, and that is deliberate:
+//! the whole pipeline lives inside the query (the prefilter MUST be applied there — post-filtering
+//! an approximate index destroys recall at shallow depth, ADR-2608010920). There is no
+//! orchestration left to share, so a use-case wrapper would be ceremony rather than sharing. The
+//! MCP surface calls the same port method; that is what parity requires.
+//!
 //! `touchstone search <query>` — structured prefilter → BM25 → expansion → trust rank.
 
 use crate::args::SearchArgs;

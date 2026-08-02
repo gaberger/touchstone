@@ -34,7 +34,7 @@ use touchstone_ports::{
     SearchQuery, SearchVia, Trust,
 };
 use touchstone_usecases::{
-    capture_concept, export_bundle, format_bundle, lint_bundle, CaptureRequest,
+    capture_concept, export_bundle, format_bundle, lint_bundle, reindex_bundle, CaptureRequest,
 };
 
 /// Everything the surface needs, chosen by the composition root.
@@ -132,54 +132,24 @@ where
     // ── tools ───────────────────────────────────────────────────────────────
 
     fn t_index(&self) -> CallToolResult {
-        let paths = self.files.paths();
-        let known: std::collections::HashSet<String> = paths.iter().cloned().collect();
-        let mut errors: Vec<Value> = Vec::new();
-        let mut indexed = 0usize;
-
+        // Same use case the CLI calls. Previously this did everything EXCEPT regenerate the
+        // index.md files, so `touchstone_index` and `touchstone index` had the same name, the
+        // same description, and different effects on disk.
         let Ok(mut index) = self.index.lock() else {
             return Self::fail("The index lock is poisoned.", "Restart the server.");
         };
-
-        for path in &paths {
-            let Some(raw) = self.files.raw_bytes(path) else {
-                errors.push(json!({ "path": path, "error": "raw bytes not readable" }));
-                continue;
-            };
-            let parsed = self.parser.parse(path, &raw);
-            if let Some(ref e) = parsed.error {
-                errors.push(json!({ "path": path, "error": e }));
-            }
-            let rec = IndexRecord {
-                path: parsed.path.clone(),
-                concept_type: parsed.concept_type.clone(),
-                title: parsed.title.clone(),
-                description: parsed.description.clone(),
-                body: parsed.body.clone(),
-                tags: parsed.tags.clone(),
-                trust: parsed.trust,
-                status: parsed.status.clone(),
-                stale_after: None,
-                fm_json: parsed.frontmatter_json.clone(),
-                conformant: parsed.conformant(),
-                error: parsed.error.clone(),
-                digest: touchstone_ports::fnv64(&raw),
-                links: Self::links_of(path, &parsed.body),
-            };
-            match index.upsert(&rec, &known) {
-                Ok(()) => indexed += 1,
-                Err(e) => errors.push(json!({ "path": path, "error": e })),
-            }
-        }
-
-        // Drop what has left the bundle, then resolve edges once over the whole set.
-        for stale in index.all_paths().into_iter().filter(|p| !known.contains(p)) {
-            let _ = index.remove(&stale);
-        }
-        let _ = index.reresolve();
-        let _ = index.commit();
-
-        Self::ok(json!({ "indexed": indexed, "errors": errors }))
+        let r = reindex_bundle(&self.files, &self.parser, &mut *index);
+        Self::ok(json!({
+            "indexed": r.total,
+            "new": r.new,
+            "changed": r.changed,
+            "removed": r.removed,
+            "indexes_written": r.indexes_written,
+            "broken_links": r.broken_links,
+            "errors": r.non_conformant.iter()
+                .map(|(p, e)| json!({ "path": p, "error": e }))
+                .collect::<Vec<_>>(),
+        }))
     }
 
     fn t_search(&self, args: &Map<String, Value>) -> CallToolResult {
