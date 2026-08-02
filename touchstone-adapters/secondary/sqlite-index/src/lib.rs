@@ -134,6 +134,36 @@ fn trust_boost(t: Trust) -> f64 {
     }
 }
 
+/// Build an FTS5 MATCH expression from a user's query.
+///
+/// **This exists because FTS5 defaults to implicit AND, and that made the search tool useless
+/// to an agent.** Passing a question straight through — which is exactly what an LLM does with
+/// a parameter described as "full-text query" — required every word of it to appear in one
+/// concept, including `what`, `is` and `the`. Measured on the A10 pilot corpus: 20 of 20
+/// natural-language questions returned zero hits. Not poor ranking. Zero.
+///
+/// So terms are OR-ed and BM25 is left to rank, which is what BM25 is for: a concept matching
+/// six of eight terms should outrank one matching two, rather than both being discarded for
+/// matching seven.
+///
+/// Each term is double-quoted, which also escapes the FTS5 operators (`*`, `:`, `^`, `-`,
+/// `NEAR`) that a natural question is full of — `"What is E4b?"` would otherwise be a syntax
+/// error rather than a search.
+///
+/// A query already containing a quoted phrase is passed through untouched, so
+/// `"post-filter authorization"` still means the phrase and an explicit `AND`/`OR` still works.
+fn fts_query(raw: &str) -> String {
+    if raw.contains('"') {
+        return raw.to_string(); // caller is speaking FTS5 deliberately
+    }
+    let terms: Vec<String> = raw
+        .split(|c: char| !c.is_alphanumeric() && c != '\'')
+        .filter(|t| !t.is_empty())
+        .map(|t| format!("\"{}\"", t.replace('"', "")))
+        .collect();
+    if terms.is_empty() { String::new() } else { terms.join(" OR ") }
+}
+
 impl BundleIndex for SqliteIndex {
     fn prev_digests(&self) -> HashMap<String, String> {
         self.conn
@@ -253,6 +283,10 @@ impl BundleIndex for SqliteIndex {
         if q.text.trim().is_empty() {
             return Ok(vec![]);
         }
+        let match_expr = fts_query(&q.text);
+        if match_expr.is_empty() {
+            return Ok(vec![]);
+        }
         let limit = if q.limit == 0 { 10 } else { q.limit };
         // Over-fetch before ranking. Post-filtering an approximate index destroys recall at
         // shallow depth; depth restores it (ADR-2608010920, measured in E1 at recall >= 0.95).
@@ -285,7 +319,7 @@ impl BundleIndex for SqliteIndex {
              ORDER BY bm LIMIT ?"
         );
 
-        let mut pv: Vec<Value> = vec![Value::Text(q.text.clone())];
+        let mut pv: Vec<Value> = vec![Value::Text(match_expr)];
         pv.extend(extra.iter().map(|v| Value::Text(v.clone())));
         pv.push(Value::Integer(depth));
 
@@ -414,10 +448,10 @@ impl SearchIndex for SqliteIndex {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    fn rec(path: &str, title: &str, body: &str) -> IndexRecord {
+    pub(crate) fn rec(path: &str, title: &str, body: &str) -> IndexRecord {
         IndexRecord {
             path: path.into(),
             concept_type: "Note".into(),
@@ -591,5 +625,68 @@ mod tests {
         assert_eq!(i.stats().total, 1);
         // ...but it is not a search result, because it has no valid type to rank under.
         assert!(BundleIndex::search(&i, &SearchQuery { text: "searchable".into(), ..Default::default() }).unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod fts_query_tests {
+    use super::tests::rec;
+    use super::*;
+
+    /// The defect the A10 harness found on its first run: FTS5 implicit AND meant a question
+    /// required every one of its words -- `what`, `is`, `the` included -- to appear in a single
+    /// concept. 20 of 20 natural-language questions returned zero hits.
+    #[test]
+    fn a_natural_language_question_becomes_an_or_query() {
+        let q = fts_query("What is the kill criterion for this whole architecture?");
+        assert!(q.contains(" OR "), "terms must be OR-ed, not AND-ed: {q}");
+        assert!(q.contains("\"kill\""), "content words must survive: {q}");
+        assert!(!q.contains('?'), "punctuation must not reach FTS5: {q}");
+    }
+
+    /// A question mark or a hyphen is an FTS5 operator. Unescaped, the query is a syntax error
+    /// rather than a search -- which reads to the caller as "no results".
+    #[test]
+    fn operators_in_prose_are_escaped_not_executed() {
+        for raw in ["What is E4b?", "post-filter authorization", "trust: human", "a * b", "NEAR x"] {
+            let q = fts_query(raw);
+            assert!(!q.is_empty(), "{raw} produced an empty query");
+            assert!(
+                q.split(" OR ").all(|t| t.starts_with('"') && t.ends_with('"')),
+                "every term must be quoted so operators cannot execute: {raw} -> {q}"
+            );
+        }
+    }
+
+    /// An explicit phrase is the caller speaking FTS5 on purpose. Do not rewrite it.
+    #[test]
+    fn an_explicit_phrase_is_passed_through() {
+        let raw = "\"post-filter authorization\"";
+        assert_eq!(fts_query(raw), raw);
+    }
+
+    #[test]
+    fn punctuation_only_input_yields_no_query_rather_than_a_syntax_error() {
+        assert!(fts_query("???").is_empty());
+        assert!(fts_query("   ").is_empty());
+    }
+
+    /// OR must not become "match anything": ranking still has to put the better match first.
+    #[test]
+    fn or_still_ranks_the_denser_match_first() {
+        let mut i = SqliteIndex::in_memory().unwrap();
+        let mut a = rec("n/a.md", "A", "kill criterion architecture pre-registered");
+        a.digest = "a".into();
+        let mut b = rec("n/b.md", "B", "architecture");
+        b.digest = "b".into();
+        i.upsert(&a, &HashSet::new()).unwrap();
+        i.upsert(&b, &HashSet::new()).unwrap();
+
+        let hits = BundleIndex::search(
+            &i,
+            &SearchQuery { text: "what is the kill criterion".into(), ..Default::default() },
+        )
+        .unwrap();
+        assert_eq!(hits[0].path, "n/a.md", "the denser match must rank first, not merely appear");
     }
 }
