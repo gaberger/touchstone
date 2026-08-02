@@ -154,9 +154,48 @@ impl Bundle {
     /// claim if something actually disposes of it.
     pub fn destroy_derived(&self) {
         let _ = fs::remove_dir_all(self.root.join(".touchstone"));
-        for rel in self.index_files().keys() {
+        for rel in self.generated_index_files().keys() {
             let _ = fs::remove_file(self.root.join(rel));
         }
+    }
+
+    /// The `index.md` files touchstone actually generates: those in a directory that contains
+    /// at least one concept, or an ancestor of one.
+    ///
+    /// **This is the resolution of E4b.** A1 said "everything above the bundle is derived and
+    /// disposable", and a real third-party bundle falsified it: `acme_retail/attesters/` holds
+    /// only `sql_equality.py` and a hand-written `index.md` describing it. Touchstone cannot
+    /// generate an index for a directory with no concepts -- there is nothing to list -- so
+    /// that file was never derived. Deleting it was the drill destroying authored content and
+    /// then reporting the loss as a failure of the implementation.
+    ///
+    /// A1 is therefore narrowed, not abandoned: **everything touchstone generates is derived
+    /// and disposable.** An `index.md` in a concept-free directory is authored knowledge --
+    /// often the only description of an artifact -- and is out of scope for the claim.
+    pub fn generated_index_files(&self) -> BTreeMap<String, Vec<u8>> {
+        let concept_dirs: std::collections::BTreeSet<String> = self
+            .concept_files()
+            .keys()
+            .map(|p| p.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default())
+            .flat_map(|d| {
+                // A directory and every ancestor of it, root included.
+                let mut out = vec![String::new()];
+                let mut acc = String::new();
+                for seg in d.split('/').filter(|s| !s.is_empty()) {
+                    if acc.is_empty() { acc = seg.to_string() } else { acc = format!("{acc}/{seg}") }
+                    out.push(acc.clone());
+                }
+                out
+            })
+            .collect();
+
+        self.index_files()
+            .into_iter()
+            .filter(|(rel, _)| {
+                let dir = rel.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default();
+                concept_dirs.contains(&dir)
+            })
+            .collect()
     }
 
     /// Concept count as the implementation reports it.

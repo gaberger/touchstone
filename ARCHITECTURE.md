@@ -156,7 +156,7 @@ Every load-bearing claim, and whether it is measured:
 
 | Claim | Status | Evidence |
 |---|---|---|
-| Index is byte-identically rebuildable | **measured, one FALSIFYING case** | T1 across 5 bundles; E4b holds on `acme_retail` |
+| Everything touchstone GENERATES is byte-identically rebuildable | **measured** | T1 across 5 bundles; E4b resolved by narrowing A1 (E8) |
 | Round-trip is byte-exact (CRLF, unicode, anchors) | **measured** | T2a, all 5 bundles |
 | Unknown types/keys and broken links preserved | **measured** | T2c |
 | Trust tier is stable across a canonical rewrite | **measured** | T2b |
@@ -166,18 +166,18 @@ Every load-bearing claim, and whether it is measured:
 | Parsers diverge on merge keys | **measured** | RUST-PATH §1 |
 | Hybrid retrieval beats BM25 alone | **UNTESTED** (A4) | — |
 | Trust tiers improve ranking | **UNTESTED** (A8) | — |
-| Holds at 50k concepts | **UNTESTED** (A5) | corpus generated, unmeasured |
+| Holds at 50k concepts | **measured — query yes, indexing no** | E9: 0.26s query, but 17min cold index |
 | **Beats `rg` + Obsidian** | **UNTESTED** (A10) | project-fatal |
 | **Anyone writes into it unprompted** | **UNTESTED** (A3) | project-fatal |
 
 The last two outrank everything buildable. A brain nobody writes to is an empty database
 with good latency.
 
-The first row is the one to read twice. "Byte-identically rebuildable" is the claim the whole
-derived plane rests on, and it is **false in one measured case** — a directory holding no
-concepts, whose `index.md` therefore cannot be regenerated (E4b). It is recorded rather than
-fixed because fixing it means deciding what the file should contain, which is a spec reading,
-not a bug fix. The gate prints it on every run.
+The first row was false for most of this project's life. E4b showed a real bundle whose
+`index.md` could not be regenerated — and the resolution was not to make the implementation
+cleverer but to correct the claim: touchstone cannot generate an index for a directory with
+no concepts, so that file was never derived. **A1 now says what it means** — everything
+touchstone *generates* is derived and disposable — and the drills enforce exactly that (E8).
 
 ## Hexagonal rules (enforced by `hex analyze .`)
 

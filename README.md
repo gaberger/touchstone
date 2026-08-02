@@ -85,7 +85,7 @@ What the oracle was for did not go away, so it was moved rather than dropped:
 | the ten drills | `touchstone-conformance`, driving the binary as a black box |
 | a second opinion on ambiguous bytes | the drills assert the property directly instead of by comparison |
 | E4a (`log.md` is a concept) | an assertion in `touchstone-conformance/tests/fixture.rs` |
-| E4b (A1 fails on concept-free dirs) | a recorded known-defect in `touchstone-conformance/tests/drills.rs` |
+| E4b (A1 fails on concept-free dirs) | resolved — A1 narrowed to what touchstone generates (E8) |
 
 Because the suite names no `touchstone-*` crate — a rule the architecture test enforces — it can gate an
 implementation it did not compile:
@@ -167,7 +167,11 @@ concepts: 2
 ```
 
 Byte-identical, and drill T1 asserts it on every run — against this fixture and four
-third-party bundles. (One recorded exception: see E4b below.)
+third-party bundles.
+
+Note the precision: *generated* `index.md`. An `index.md` in a directory holding no concepts
+is authored knowledge — often the only description of a PDF or a script sitting beside it —
+and touchstone neither writes nor destroys it (E8).
 
 **Lint catches what actually goes wrong**, which is duplicates rather than schema violations:
 
@@ -282,9 +286,11 @@ truth. `export` writes raw bytes, so there is no serializer in the write path th
 drop an unknown key — the failure mode is structurally impossible rather than merely
 tested for.
 
-**Everything above the bundle is derived and disposable.** Delete `.touchstone/` and every
-`index.md`, run `touchstone index`, and the result is byte-identical. T1 enforces this — and
-currently falsifies it in one recorded case, E4b below.
+**Everything touchstone generates is derived and disposable.** Delete `.touchstone/` and
+every *generated* `index.md`, run `touchstone index`, and the result is byte-identical. T1
+enforces this. The wording is precise on purpose: an `index.md` in a directory holding no
+concepts is authored knowledge — often the only description of an artifact — and touchstone
+neither generates nor destroys it (E8).
 
 **The spec's tolerance is honored, not narrowed.** Unknown `type` values, unknown
 frontmatter keys, and broken links are all preserved and indexed — the spec requires
@@ -302,14 +308,6 @@ plus four vendored third-party ones): index rebuild determinism, idempotence, by
 round-trip through CRLF / unicode paths / YAML anchors / multiline scalars, unknown key and
 type preservation, broken-link tolerance, ISO 8601 preservation, formatter safety, the trust
 invariant, and recovery of the whole index from files alone.
-
-Failing, recorded, undecided:
-
-- **E4b** — `acme_retail/attesters/` holds no concepts, so the `index.md` upstream ships for
-  it cannot be regenerated. A1 — *everything above the bundle is derived* — is therefore
-  false as stated. Either `index` reconstructs concept-free directories, or A1 narrows to
-  directories that contain concepts. The gate reports this as `XFAIL` on every run rather
-  than hiding it, and will fail loudly if it silently starts passing.
 
 Not tested, and load-bearing:
 
