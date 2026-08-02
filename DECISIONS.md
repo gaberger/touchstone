@@ -1,4 +1,4 @@
-# Adjudication Record — OKF Second Brain
+# Adjudication Record — Touchstone
 
 Two adversarial reviewers were run against `ARCHITECTURE.md` (draft v0):
 
