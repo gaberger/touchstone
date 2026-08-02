@@ -28,7 +28,18 @@ pub trait FrontmatterParser { fn parse(&self, raw: &[u8]) -> Result<Concept, Str
 ///
 /// Paths are bundle-relative, slash-separated, and sorted, so every walk is deterministic —
 /// which is what makes the T1 byte-identical rebuild reproducible rather than lucky.
-pub trait ConceptRepository { fn paths(&self) -> Vec<String>; }
+pub trait ConceptRepository {
+    fn paths(&self) -> Vec<String>;
+
+    /// Bundle-relative paths of every file that is NOT a concept and NOT derived state:
+    /// images, PDFs, recordings, scripts — the artifacts concepts point at via `resource:`.
+    ///
+    /// Deliberately not defaulted. A default returning empty would let an implementer forget
+    /// this and still compile, and `export` would go on silently dropping every PDF in the
+    /// bundle — which is precisely the defect drill M1 caught. Making it required forces the
+    /// question to be answered rather than skipped.
+    fn artifact_paths(&self) -> Vec<String>;
+}
 pub trait SearchIndex { fn search(&self, q: &str) -> Vec<Concept>; }
 pub trait VersionControl { fn attest(&self, path: &str) -> Result<(), String>; }
 pub trait SyncEngine { fn merge(&self, path: &str) -> Result<(), String>; }

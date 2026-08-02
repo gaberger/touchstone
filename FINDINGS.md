@@ -409,6 +409,45 @@ exists in `touchstone-domain` and is never derived by anything. Both implementat
 because a trust tier that cannot be reached is either dead code or a missing rule, and which one it
 is has not been decided.
 
+## E7 — E4b is the media case, and export dropped every artifact
+
+Building the media drills (`touchstone-conformance/tests/media.rs`) to answer "can this
+attach knowledge to photos, PDFs and files?" surfaced two defects, one of them worse than
+the question that prompted it.
+
+**M1 — `export` carried no artifacts at all.** `export_bundle` iterated
+`ConceptRepository::paths()`, which by design returns only `.md`. So the command the README
+calls *"leaving is a supported operation"* and *"byte-exact by construction"* silently
+dropped every PNG, PDF, recording and script in the bundle. The markdown was byte-exact; the
+bundle was not. Portability is this project's central claim and it held only for prose.
+
+Fixed: `ConceptRepository` gained `artifact_paths()` — deliberately **not** defaulted, since a
+default returning empty would let an implementer forget it and still compile, which is how
+the defect existed in the first place. Export now carries concepts *and* artifacts.
+
+**M3 — E4b is not an A1 technicality.** `_media/orphan/attester.sql` is described only by a
+hand-written `index.md` in a directory holding no concepts. `index` deletes every `index.md`
+as generated and cannot regenerate that one, so the artifact survives and the knowledge about
+it does not. That is the same shape as `_upstream/acme_retail/attesters/sql_equality.py`.
+
+E4b has been carried all session as an abstract falsification of A1. It is not abstract: it
+is the **first instance of attaching knowledge to a file, and it loses the knowledge**. The
+bytes stay on disk; what is lost is what the file is, who verified it, and when it goes
+stale. An artifact nobody can account for is not an asset.
+
+That reframing does not decide it — either `index` reconstructs concept-free directories, or
+A1 narrows to directories that contain concepts — but it changes the stakes from a spec
+nicety to a data-loss path in the use case that motivated the question.
+
+Recorded as an XFAIL asserting the *exact* known set, so a different orphan fails and so does
+an empty one: a defect that quietly stops reproducing means this file is asserting something
+false.
+
+**What passed matters too.** M4: an artifact is findable by what it is *about* — "on-call
+escalation procedure" surfaces `handbook.pdf` — not by filename. M5: a signed PDF reads as
+`human` while an unreviewed screen recording reads as `unattributed`. Those two are the
+difference between this and a filesystem with good names.
+
 ## Still open
 
 - **The trust invariant has no enforcement mechanism.** Signed commits and a CI gate are
