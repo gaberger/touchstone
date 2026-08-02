@@ -491,7 +491,7 @@ table. Cold index of `_scale`:
 | | |
 |---|---|
 | concepts | 50,000 |
-| cold index | **1,028 s (17 min)** |
+| cold index | **1,028 s (17 min)** — see E10, now 11.85 s |
 | index size | 248 MB |
 | query latency | 0.26 s |
 
@@ -504,6 +504,60 @@ indicated fix, and it is a small change to one adapter.
 Worth setting against RUST-PATH §4, which declined to assert a number and said performance
 "is not the deciding input". It still is not — but the number is now known, and it lands on
 exactly the paths that document predicted would hurt: the filesystem watcher and pre-commit.
+
+## E10 — the 17 minutes was one word in a schema
+
+A5 came back at 1,028 s for 50k and the obvious reading was write amplification: five
+statements per concept, each its own implicit transaction. Batching them cut 5k from 25.4 s
+to 7.5 s — a 3.4x win that made the diagnosis look confirmed.
+
+It was not. At 50k the same change gave **11%**. Worse, wrapping the whole run in a single
+transaction was actively harmful: nothing checkpoints until the end, so `index.db` stayed at
+0 bytes while `index.db-wal` passed 216 MB and every upsert's conflict lookup searched an
+ever-growing WAL. The fix had to become *periodic* commits, which bounded the WAL and
+recovered the 11%.
+
+The real cause only showed up in the scaling curve:
+
+| concepts | before | after |
+|---|---|---|
+| 2,000 | 0.6 ms/concept | 0.34 |
+| 5,000 | 1.5 | 0.25 |
+| 10,000 | 3.3 | 0.28 |
+| 20,000 | 6.3 | 0.39 |
+
+Per-concept cost doubling as the corpus doubles is **quadratic** — ten times the concepts
+costing a hundred times the time. Quadratic is an algorithm property, and no storage engine
+fixes one; it only moves the constant.
+
+The cause was one word. The FTS5 schema declares `path UNINDEXED`, which means exactly that:
+no index. So `DELETE FROM fts WHERE path=?`, issued once per concept on re-index, was a **full
+scan of the entire FTS table**. Deleting by `rowid` — which is indexed — makes it logarithmic.
+
+| | before | after |
+|---|---|---|
+| 50k cold index | 1,028 s | **11.85 s** |
+| 50k query | 0.26 s | 0.11 s |
+
+**87x, and the curve is flat.** A5 is answered: this holds at 50k.
+
+Three things worth keeping from how this went wrong:
+
+1. **5k was too small to contain the bug.** The 3.4x from batching was real and led nowhere.
+   Extrapolating a fix from a corpus an order of magnitude below the target is how you end up
+   optimising the wrong thing with data to back you.
+2. **The obvious diagnosis fitted the evidence and was still wrong.** `sys` at twice `user`
+   genuinely did indicate syscall pressure — it just was not the dominant term. A measurement
+   consistent with a hypothesis is not the same as a measurement that discriminates between
+   hypotheses. The scaling *curve* discriminated; the single data point did not.
+3. **The engine question was a red herring, and nearly a costly one.** Columnar and OLAP
+   engines were raised twice while this looked like a storage problem. Either would have been
+   a large migration that left the quadratic in place.
+
+Regression tests assert the *shape* rather than a timing, since a wall-clock assertion would
+be flaky on shared CI: re-indexing must leave exactly one FTS row per concept, FTS rowids must
+track their concept, and `remove` must take the FTS row with it. A stale row is the symptom
+that forced the scan.
 
 ## Still open
 
@@ -520,7 +574,6 @@ exactly the paths that document predicted would hurt: the filesystem watcher and
 - **A6 on real embeddings with ANN** — before deleting the corporate seam for good.
 - ~~**T2 against the upstream sample bundles**~~ — run; see E4. A2 survives; A1 does not.
 - ~~**E4b**~~ — resolved; see E8. A1 narrows to what touchstone generates.
-- **Index throughput** — 17 minutes for 50k (E9). Diagnosed as unbatched SQLite writes;
-  unfixed.
+- ~~**Index throughput**~~ — fixed; see E10. 50k in 11.85 s, curve flat.
 - **`Trust::Attested` is unreachable** — a documented tier with no derivation rule (E6).
 - **Scale** — the fixture is 25 concepts. Nothing here says anything about 50k.

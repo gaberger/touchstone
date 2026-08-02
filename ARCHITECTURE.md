@@ -166,7 +166,7 @@ Every load-bearing claim, and whether it is measured:
 | Parsers diverge on merge keys | **measured** | RUST-PATH §1 |
 | Hybrid retrieval beats BM25 alone | **UNTESTED** (A4) | — |
 | Trust tiers improve ranking | **UNTESTED** (A8) | — |
-| Holds at 50k concepts | **measured — query yes, indexing no** | E9: 0.26s query, but 17min cold index |
+| Holds at 50k concepts | **measured** | E10: 11.85s cold index, 0.11s query, curve flat |
 | **Beats `rg` + Obsidian** | **UNTESTED** (A10) | project-fatal |
 | **Anyone writes into it unprompted** | **UNTESTED** (A3) | project-fatal |
 
