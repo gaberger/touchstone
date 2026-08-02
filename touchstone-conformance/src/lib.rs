@@ -122,6 +122,23 @@ impl Bundle {
     /// Run and require exit code 0.
     pub fn ok(&self, args: &[&str]) -> Out {
         let o = self.run(args);
+        if o.code != 0 && o.stderr.contains("unrecognized subcommand") {
+            // A STALE binary, not a failing drill. The suite is black-box by design, so it
+            // cannot tell "this build is old" from "this behaviour is wrong" -- and the
+            // resulting five-drills-red looks exactly like a regression. It happened: main's
+            // release binary predated `attest`, and the attestation drills all failed against
+            // a build that had never heard of the command.
+            panic!(
+                "[{}] `{}` -- the binary does not know this subcommand.\n\
+                 The conformance suite drives target/release/touchstone as a black box, so a \
+                 STALE binary reads as a failing drill. Rebuild first:\n\
+                 \n    cargo build --release --bin touchstone\n\
+                 \n(stderr: {})",
+                self.name,
+                args.join(" "),
+                o.stderr.trim()
+            );
+        }
         assert_eq!(o.code, 0, "[{}] `{}` exited {}: {}", self.name, args.join(" "), o.code, o.stderr);
         o
     }
