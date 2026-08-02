@@ -56,30 +56,60 @@ touchstone --bundle ~/brain watch &                     # index stays current
 Capture a thought — no editor, no title needed, 0.01s:
 
 ```console
-$ touchstone --bundle ~/brain capture "Finance report uses ingested_at, not order time."
-decisions/finance-report-uses-ingested-at-not-order-time.md
+$ touchstone --bundle ~/brain capture "Q4 was never restated. Only Q1 got the corrected basis."
+notes/q4-was-never-restated.md
 ```
 
-Search returns concept *paths*, not chunks — the agent reads whole files:
+Ask a question months later, in the words you actually have:
 
 ```console
-$ touchstone --bundle ~/brain search "which timestamp does the finance report use"
-* decisions/finance-report-uses-ingested-at-not-order-time.md
-    Finance report uses ingested_at, not order time  [Decision]
+$ touchstone --bundle ~/brain search "why don't the quarterly figures agree"
+* decisions/margin-restatement-is-incomplete.md
+    Margin restatement is incomplete  [Decision]
+    Only Q1 was corrected; Q4 still uses the old basis.
 
 * human-verified   ~ machine-generated
 ```
 
-Sign what you have checked, and see when something changes underneath it:
+You did not remember the title, the filename, or the word "margin". The `*` says a human
+signed off on that one.
+
+Ask something grep cannot express at all — a *field*, not a word:
 
 ```console
-$ touchstone --bundle ~/brain attest decisions/finance-...md --as human:gary --key ~/.ssh/id_ed25519
+$ touchstone --bundle ~/brain search "margin" --type Decision --status stable --trust human
+```
+
+Then ask where the claim came from:
+
+```console
+$ touchstone --bundle ~/brain show decisions/margin-restatement-is-incomplete.md --json
+{
+  "path": "decisions/margin-restatement-is-incomplete.md",
+  "trust": "human",
+  "sources": [
+    "raw/interview-priya.txt",
+    "raw/email-thread.eml"
+  ]
+}
+```
+
+An interview and an email you ingested weeks ago. Both still in the bundle, byte-identical,
+and both travel with it when you leave.
+
+Finally: is that `human` tier worth anything?
+
+```console
+$ touchstone --bundle ~/brain verify
+0 of 1 human claims backed                      # a claim is just text until it is signed
+
+$ touchstone --bundle ~/brain attest decisions/margin-...md --as human:gary --key ~/.ssh/id_ed25519
 $ touchstone --bundle ~/brain verify
 1 of 1 human claims backed
 
-$ echo "an edit nobody verified" >> decisions/finance-...md
+$ echo "an edit nobody verified" >> decisions/margin-...md
 $ touchstone --bundle ~/brain verify
-STALE: decisions/finance-report-uses-ingested-at-not-order-time.md
+STALE: decisions/margin-restatement-is-incomplete.md
   signed, but the concept changed since -- the verified bytes are not these bytes
 ```
 
