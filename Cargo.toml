@@ -19,6 +19,7 @@ members = [
   "okf-adapters/secondary/crdt-sync",
   "okf-adapters/secondary/embed-local",
   "okf-cli",
+  "okf-conformance",
 ]
 
 [workspace.package]

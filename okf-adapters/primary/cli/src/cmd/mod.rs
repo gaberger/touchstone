@@ -4,4 +4,5 @@ pub mod index;
 pub mod lint;
 pub mod new;
 pub mod search;
+pub mod show;
 pub mod stats;

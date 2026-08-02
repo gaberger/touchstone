@@ -9,9 +9,9 @@ verified:
     at: 2026-07-15T09:00:00Z
 ---
 
-1. `rm -rf .brain/`
+1. `rm -rf .touchstone/`
 2. `find . -name index.md -delete`
-3. `brain index`
+3. `touchstone index`
 4. `git diff --exit-code`
 
 Any diff falsifies the derivability claim.

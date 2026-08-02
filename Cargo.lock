@@ -307,6 +307,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "okf-conformance"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "okf-crdt-sync"
 version = "0.1.0"
 dependencies = [

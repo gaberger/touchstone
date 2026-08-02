@@ -1,5 +1,10 @@
 # Should we replace git with our own version control?
 
+> **Note.** Kept as written. The language question this weighs in passing was settled
+> separately and the other way: the port happened and the Python implementation is gone
+> (FINDINGS E6). The git-versus-CRDT argument below is unaffected — it never depended on
+> the language — and remains open.
+
 ## The question is really two questions
 
 Git is doing two unrelated jobs in this architecture, and they want opposite things:

@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
-# Touchstone acceptance gate: build, tests, architecture, drills, and the Rust/Python differential.
+# Touchstone acceptance gate: build, tests, architecture, conformance, and byte-exact export.
 #
-# This is the standing check that the Rust port stays correct. Run it by hand, from CI, or on an
-# interval (`weave loop`). Exits non-zero on any regression.
+# This is the standing check that the implementation stays correct. Run it by hand, from CI, or on
+# an interval (`weave loop`). Exits non-zero on any regression.
 #
-# The differential is the interesting part. Two implementations disagreeing is only information if you
-# already know which side should win — so KNOWN_DIVERGENCE below records the disagreements FINDINGS.md
-# has already adjudicated. An expected divergence that disappears is a regression too: it means the
-# Rust side stopped fixing a defect the Python side still has.
+# HISTORY. This gate used to run a Rust/Python differential: two implementations indexing the same
+# bundle, with a KNOWN_DIVERGENCE table recording the disagreements FINDINGS.md had adjudicated.
+# That was the right check while a second implementation existed, because a divergence is only
+# information if you already know which side should win. The Python oracle is gone (FINDINGS E6),
+# so there is nothing left to differ from, and the differential is replaced by `okf-conformance` --
+# which asserts the same properties directly instead of by comparison, and keeps working when
+# there is only one implementation. What the oracle taught us did not go with it: E4a is now an
+# assertion in okf-conformance/tests/fixture.rs, and E4b is a recorded known-defect in
+# okf-conformance/tests/drills.rs rather than a table entry here.
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 2
 ROOT=$(pwd)
 HEX=${HEX_BIN:-/Volumes/SSD/Development/hex/target/release/hex}
-PY=${PY_BIN:-.venv/bin/python}
 RS=target/release/touchstone
 
 pass=0; fail=0
@@ -22,16 +26,10 @@ bad()  { printf '  \033[31mFAIL\033[0m  %s -- %s\n' "$1" "${2:-}"; fail=$((fail+
 note() { printf '        %s\n' "$1"; }
 head_() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 
-# Bundles the differential runs over. _fixture is self-authored; _upstream is third-party OKF, which
-# is the stronger test (FINDINGS E4) and MUST NOT be mutated -- every run works on a copy.
+# Bundles the export check runs over. _fixture is self-authored; _upstream is third-party OKF,
+# which is the stronger test (FINDINGS E4) and MUST NOT be mutated -- every run works on a copy.
 BUNDLES=(_fixture)
 for b in _upstream/*/; do [ -d "$b" ] && BUNDLES+=("${b%/}"); done
-
-# Divergences FINDINGS.md has adjudicated: "<bundle>:<rust_count>:<py_count>:<why>".
-# Anything not listed here must match exactly.
-KNOWN_DIVERGENCE=(
-  "_upstream/acme_retail:10:9:E4a -- python reserves the filename log.md and drops a legitimate type:Log concept"
-)
 
 head_ "Build"
 if cargo build -q --release --bin touchstone 2>/dev/null; then ok "cargo build --release"; else bad "cargo build --release" "see cargo output"; fi
@@ -53,46 +51,33 @@ if [ -x "$HEX" ]; then
   else bad "hex analyze" "boundary violations"; fi
 else note "hex not found at $HEX -- skipped (set HEX_BIN)"; fi
 
-head_ "Drills"
-for impl in python rust; do
-  out=$($PY tests/drills.py --impl "$impl" 2>&1 | grep -E "^[0-9]+/[0-9]+ passed")
-  case "$out" in
-    *"passed"*) [ -n "$(echo "$out" | grep -o 'FAILED')" ] && bad "drills --impl $impl" "$out" || ok "drills --impl $impl -- $out" ;;
-    *) bad "drills --impl $impl" "no summary line" ;;
-  esac
-done
+head_ "Conformance"
+# The drills, as a black-box gate over the binary: T1, T1b, T2a-T2e, T6, the conformance floor,
+# the trust invariant, and search. Every drill runs against every bundle, on a copy.
+# --nocapture so recorded-defect (XFAIL) lines reach this script; cargo swallows them otherwise,
+# and a known defect nobody sees is indistinguishable from one nobody has.
+conf=$(cargo test -p okf-conformance -- --nocapture 2>&1)
+ct=$(echo "$conf" | grep -E "^test result:" | awk '{p+=$4; f+=$6} END {print p" "f}')
+cp_=${ct% *}; cf=${ct#* }
+if [ "${cf:-1}" = "0" ] && [ "${cp_:-0}" -gt 0 ]; then
+  ok "cargo test -p okf-conformance ($cp_ passed)"
+  # Surface recorded-but-unfixed defects. They are not failures, but a gate that prints only
+  # green hides the fact that a load-bearing claim is still falsified.
+  echo "$conf" | grep -E "^\s+XFAIL" | while IFS= read -r l; do note "${l#  }"; done
+else
+  bad "cargo test -p okf-conformance" "$cp_ passed, $cf failed"
+  echo "$conf" | grep -E "^\s+(FAIL|FIXED)" | head -8 | while IFS= read -r l; do note "${l#  }"; done
+fi
 
-head_ "Differential: rust vs python"
-[ -x "$RS" ] || { bad "differential" "no rust binary"; }
+head_ "Round-trip: raw bytes out"
+# T2a again, but end-to-end through the shipped binary rather than the test harness. Raw bytes are
+# authoritative; this is the claim that makes "portable" mean something rather than being a slogan.
+[ -x "$RS" ] || bad "round-trip" "no rust binary"
 for b in "${BUNDLES[@]}"; do
   [ -x "$RS" ] || break
-  tmp=$(mktemp -d); cp -R "$b" "$tmp/r"; cp -R "$b" "$tmp/p"
-  rm -rf "$tmp/r/.touchstone" "$tmp/p/.touchstone"
+  tmp=$(mktemp -d); cp -R "$b" "$tmp/r"; rm -rf "$tmp/r/.touchstone"
   "$RS" --bundle "$tmp/r" index -q >/dev/null 2>&1
-  $PY -m touchstone --bundle "$tmp/p" index -q >/dev/null 2>&1
-  rc=$("$RS" --bundle "$tmp/r" stats 2>/dev/null | awk '/^concepts:/{print $2}')
-  pc=$($PY -m touchstone --bundle "$tmp/p" stats 2>/dev/null | awk '/^concepts:/{print $2}')
-
-  expected=""
-  for k in "${KNOWN_DIVERGENCE[@]}"; do
-    [ "${k%%:*}" = "$b" ] && expected="$k"
-  done
-
-  if [ -n "$expected" ]; then
-    er=$(echo "$expected" | cut -d: -f2); ep=$(echo "$expected" | cut -d: -f3); why=$(echo "$expected" | cut -d: -f4-)
-    if [ "${rc:-x}" = "$er" ] && [ "${pc:-x}" = "$ep" ]; then
-      ok "$b -- expected divergence holds (rust $rc / python $pc)"; note "$why"
-    else
-      bad "$b" "adjudicated divergence changed: expected rust $er/python $ep, got rust ${rc:-?}/python ${pc:-?}"
-    fi
-  elif [ "${rc:-x}" = "${pc:-y}" ] && [ -n "${rc:-}" ]; then
-    ok "$b -- parity ($rc concepts both)"
-  else
-    bad "$b" "unadjudicated divergence: rust ${rc:-?} vs python ${pc:-?} -- decide which is correct, then record it in FINDINGS.md"
-  fi
-
-  # T2a byte-exact export, Rust side. Raw bytes are authoritative; this is the claim that makes
-  # "portable" mean something rather than being a slogan.
+  n=$("$RS" --bundle "$tmp/r" stats 2>/dev/null | awk '/^concepts:/{print $2}')
   "$RS" --bundle "$tmp/r" export "$tmp/exp" --force >/dev/null 2>&1
   diffs=0
   while IFS= read -r f; do
@@ -100,9 +85,17 @@ for b in "${BUNDLES[@]}"; do
     case "$rel" in .touchstone/*|index.md|*/index.md) continue;; esac
     cmp -s "$f" "$tmp/exp/$rel" || diffs=$((diffs+1))
   done < <(find "$tmp/r" -name '*.md')
-  [ "$diffs" -eq 0 ] && ok "$b -- rust round-trip byte-exact" || bad "$b" "$diffs file(s) differ through export"
+  if [ "$diffs" -eq 0 ] && [ -n "${n:-}" ]; then ok "$b -- $n concepts, round-trip byte-exact"
+  else bad "$b" "${diffs} file(s) differ through export"; fi
   rm -rf "$tmp"
 done
+
+head_ "No Python"
+# The oracle is deleted, not deprecated (FINDINGS E6). This guards the deletion: a stray module or
+# drill script reintroducing a second implementation is exactly the state this gate exists to end.
+stray=$(git ls-files '*.py' | grep -v '^_upstream/' || true)
+if [ -z "$stray" ]; then ok "no tracked Python outside vendored bundles"
+else bad "Python reintroduced" "$(echo "$stray" | tr '\n' ' ')"; fi
 
 head_ "Result"
 printf '  %s passed, %s failed\n\n' "$pass" "$fail"

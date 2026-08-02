@@ -1,8 +1,5 @@
 .touchstone/
-__pycache__/
-*.pyc
 _export*/
-.venv/
 
 # Rust build artifacts
 target/
