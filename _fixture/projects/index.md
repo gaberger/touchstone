@@ -3,4 +3,4 @@
 
 ## Project
 
-* [OKF second brain](okf-brain.md) - Building a knowledge base on the Open Knowledge Format. _(verified)_
+* [Touchstone](touchstone.md) - Building a knowledge base on the Open Knowledge Format. _(verified)_

@@ -1,8 +1,8 @@
 ---
 type: Project
-title: "OKF second brain"
+title: "Touchstone"
 description: "Building a knowledge base on the Open Knowledge Format."
-tags: [okf, architecture]
+tags: [provenance, architecture]
 status: stable
 verified:
   - by: human:gary
