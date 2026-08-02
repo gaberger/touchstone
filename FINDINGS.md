@@ -647,6 +647,48 @@ assertion about its signers, not a PKI, and a bundle that ships a forged signers
 self-consistent. What it establishes is narrower and still worth having: a claim cannot be
 added, and its content cannot be changed, without detection by anyone who holds the bundle.
 
+## E14 — signing the fixture, and what refused to sign
+
+The 13 unbacked claims of E13 are now signed by the human they name — 11 of them. The two
+that are not are the finding.
+
+**`verified-chain.md` claims `human:alice` and `human:carol`.** Gary's key cannot vouch for
+either. A first pass looped over every unbacked path and signed them all; verification rejected
+exactly those, because `allowed_signers` lists one person. The mechanism caught an attempt to
+sign someone else's claim before it could mean anything — which is what it is for, and it
+caught it against its own authors for the second time in two experiments.
+
+That exposed a real gap in `attest`: it silently signed as the *first* `human:` entry it found.
+It now requires `--as <signer>` when a concept names more than one human, and self-checks the
+signature it just made against `allowed_signers`, so "you signed as someone you are not"
+surfaces at signing time rather than as a failing `verify` later with a false entry already
+written.
+
+**`anchors.md` is the more interesting one, and it is RUST-PATH §1 surfacing somewhere nobody
+predicted.** The concept claims `human:gary` — through a YAML merge key:
+
+```yaml
+defaults: &defaults
+  by: human:gary
+verified:
+  - <<: *defaults
+  - by: human:bob
+```
+
+`serde_yaml_ng` does not implement merge keys, so the parser never sees Gary at all; the first
+visible human is Bob. The measured divergence was always described as *the trust tier flips
+with the reader*. It does more than that: **a claim behind a merge key cannot be signed**,
+because the signer the tool would attest as is not the one the author wrote. The claim is
+unreachable, not merely misread.
+
+Both concepts stay unbacked, deliberately. `_fixture` now demonstrates all three states — 11
+backed, 1 unsignable-by-parser, 1 claiming people who hold no key here — which is a better
+fixture than 13 green ones. A corpus where everything verifies cannot show what failure looks
+like.
+
+Verified end to end: signatures survive `export` (11 of 13 in the exported bundle), and editing
+a signed concept drops it to `STALE`.
+
 ## E13 — the first thing verification caught was us
 
 `touchstone verify` was built, and the first bundle it was pointed at failed:

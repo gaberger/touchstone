@@ -97,6 +97,12 @@ pub struct AttestArgs {
     /// Private key to sign with, e.g. ~/.ssh/id_ed25519.
     #[arg(long, default_value = "~/.ssh/id_ed25519")]
     pub key: String,
+    /// Which `verified[].by` to sign as, when the concept names more than one human.
+    ///
+    /// Required in that case rather than defaulted, because guessing means signing someone
+    /// else's claim with your key -- which is the one mistake this command must not make easy.
+    #[arg(long = "as", value_name = "SIGNER")]
+    pub signer: Option<String>,
 }
 
 #[derive(Args, Debug)]

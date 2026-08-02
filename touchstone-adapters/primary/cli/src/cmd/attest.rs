@@ -30,11 +30,34 @@ where
 
     // The claim must already be in the file. `attest` signs an existing statement; it does not
     // author one, because a command that both makes and signs a claim is just a claim.
-    let signer = parsed
+    let humans: Vec<String> = parsed
         .verified_entries
         .iter()
         .filter_map(|e| e.by.clone())
-        .find(|by| by.starts_with("human:"));
+        .filter(|by| by.starts_with("human:"))
+        .collect();
+
+    // A concept may name several human verifiers. Picking one silently means signing someone
+    // else's claim with your key -- which verification then rejects, correctly, but only after
+    // the manifest already carries a false entry. Refuse instead, and make the caller say who.
+    let signer = match (&args.signer, humans.len()) {
+        (Some(s), _) if humans.contains(s) => Some(s.clone()),
+        (Some(s), _) => {
+            eprintln!("{path} makes no `verified` claim by {s}.\nIt names: {}", humans.join(", "));
+            return 1;
+        }
+        (None, 1) => humans.first().cloned(),
+        (None, n) if n > 1 => {
+            eprintln!(
+                "{path} names {n} human verifiers: {}.\n\
+                 Pass --as <signer> to say which claim you are signing. Signing another \
+                 person's claim with your key produces an attestation that will be rejected.",
+                humans.join(", ")
+            );
+            return 1;
+        }
+        _ => None,
+    };
     let Some(signer) = signer else {
         eprintln!(
             "{path} makes no `human:` verification claim.\n\
@@ -65,6 +88,21 @@ where
     if let Err(e) = files.write(MANIFEST_REL, out.as_bytes()) {
         eprintln!("cannot write {MANIFEST_REL}: {e}");
         return 1;
+    }
+
+    // Self-check: if the bundle already declares its signers, confirm the signature we just
+    // made actually verifies. Otherwise the first sign of "you signed as someone you are not"
+    // is a failing `verify` later, with a manifest entry already written.
+    if let Some(allowed) = files.raw_bytes(SIGNERS_REL) {
+        let allowed = String::from_utf8_lossy(&allowed).to_string();
+        let payload = Attestation::payload(&entry.path, &entry.digest, &entry.signer, &entry.at);
+        if !matches!(vc.verify(&payload, &entry.signature, &entry.signer, &allowed), Ok(true)) {
+            eprintln!(
+                "warning: this attestation does not verify against {SIGNERS_REL}.\n\
+                 The key you signed with is probably not the one listed for {signer}. The entry \
+                 was written, but `touchstone verify` will reject it."
+            );
+        }
     }
 
     println!("attested {path} as {signer}");
