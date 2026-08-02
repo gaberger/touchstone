@@ -31,3 +31,6 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 rmcp = { version = "3.1", features = ["server", "transport-io", "transport-streamable-http-server"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "signal"] }
 axum = "0.8"
+# Filesystem watching for `touchstone watch`. In the composition root rather than an adapter:
+# WHEN to reindex is a wiring decision, and the use case does not care what woke it.
+notify = "8"

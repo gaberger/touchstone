@@ -1,0 +1,5 @@
+Interview with Priya, 16 July 2026
+
+Q: which created_at does the finance report use?
+A: the ingest timestamp, not the order time. It has been wrong since the March migration.
+We restated Q1 but never went back for Q4.

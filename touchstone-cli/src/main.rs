@@ -73,6 +73,12 @@ fn main() {
 
     // `mcp` is served here rather than dispatched as a command: it needs an async runtime and
     // the whole adapter set, neither of which belongs inside a command handler.
+    // Long-running, like `mcp`: dispatched here rather than as a command handler because it
+    // never returns and owns the rebuild loop.
+    if let Command::Watch = &cli.command {
+        std::process::exit(watch::run(&bundle));
+    }
+
     if let Command::Mcp(args) = &cli.command {
         std::process::exit(mcp::serve(&bundle, args.http.as_deref()));
     }
@@ -187,6 +193,99 @@ use touchstone_yaml_serde::YamlSerde;
                 eprintln!("http server error: {e}");
                 1
             }
+        }
+    }
+}
+
+// ── watch ─────────────────────────────────────────────────────────────────────
+
+mod watch {
+    use notify::{RecursiveMode, Watcher};
+    use std::path::Path;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+    use touchstone_fs_bundle::FsBundle;
+    use touchstone_sqlite_index::SqliteIndex;
+    use touchstone_usecases::reindex_bundle;
+    use touchstone_yaml_serde::YamlSerde;
+
+    /// Quiet period after the last change before reindexing.
+    ///
+    /// An editor save is several filesystem events -- write, rename, chmod -- and a sync client
+    /// can produce hundreds in a burst. Reindexing per event would spend the whole day
+    /// rebuilding; debouncing means one rebuild per burst.
+    const SETTLE: Duration = Duration::from_millis(400);
+
+    /// True for a path the watcher must ignore.
+    ///
+    /// Without this the watcher feeds itself: reindexing writes `.touchstone/index.db`, which
+    /// is a change, which triggers a reindex. Measured on an empty bundle it was four rebuilds
+    /// per capture, and it only converged because there was nothing to do -- on a real bundle
+    /// each pass would take long enough to overlap the next and never settle.
+    ///
+    /// The rule is the same one the rest of the system uses: derived state is not knowledge.
+    /// `.touchstone/` is the index, `.a3/` is the capture log, and neither is a reason to
+    /// rebuild anything.
+    fn is_derived(p: &Path) -> bool {
+        p.components().any(|c| {
+            let s = c.as_os_str().to_string_lossy();
+            s == ".touchstone" || s == ".a3"
+        })
+    }
+
+    pub fn run(bundle: &Path) -> i32 {
+        let (tx, rx) = mpsc::channel();
+        let mut watcher = match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+            // Filter at the source, so a burst of index writes never even reaches the debouncer.
+            if let Ok(ev) = &res {
+                if ev.paths.iter().all(|p| is_derived(p)) {
+                    return;
+                }
+            }
+            let _ = tx.send(res);
+        }) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("cannot start watcher: {e}");
+                return 1;
+            }
+        };
+        if let Err(e) = watcher.watch(bundle, RecursiveMode::Recursive) {
+            eprintln!("cannot watch {}: {e}", bundle.display());
+            return 1;
+        }
+
+        let reindex = |why: &str| {
+            let Ok(mut index) = SqliteIndex::open(bundle) else {
+                eprintln!("cannot open index");
+                return;
+            };
+            let started = Instant::now();
+            let r = reindex_bundle(&FsBundle::new(bundle), &YamlSerde, &mut index);
+            eprintln!(
+                "[{why}] {} concepts ({} changed, {} new, {} removed) in {}ms",
+                r.total,
+                r.changed,
+                r.new,
+                r.removed,
+                started.elapsed().as_millis()
+            );
+        };
+
+        eprintln!("watching {} -- ctrl-c to stop", bundle.display());
+        reindex("initial");
+
+        loop {
+            // Block for the first event of a burst, then drain the rest before doing any work.
+            let Ok(_) = rx.recv() else { return 0 };
+            loop {
+                match rx.recv_timeout(SETTLE) {
+                    Ok(_) => continue,
+                    Err(mpsc::RecvTimeoutError::Timeout) => break,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return 0,
+                }
+            }
+            reindex("change");
         }
     }
 }

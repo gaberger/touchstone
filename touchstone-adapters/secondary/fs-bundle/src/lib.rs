@@ -42,7 +42,7 @@ impl FsBundle {
 /// working and fixture areas (`_upstream/`, `_work-*`). `node_modules` is excluded because a
 /// vendored JS tree can hold thousands of markdown files that are not knowledge.
 fn skip_dir(name: &str) -> bool {
-    name.starts_with('.') || name.starts_with('_') || name == "node_modules" || name == RAW_DIR
+    is_hidden(name) || name.starts_with('_') || name == "node_modules" || name == RAW_DIR
 }
 
 /// The immutable source layer. Reserved at the bundle root.
@@ -53,6 +53,18 @@ fn skip_dir(name: &str) -> bool {
 /// cites it.
 pub const RAW_DIR: &str = "raw";
 
+/// Dotfiles are never part of a bundle — not as concepts, not as artifacts, not as sources.
+///
+/// `.DS_Store`, `.gitkeep`, editor swap files and sync turds arrive uninvited and belong to
+/// nobody. Indexing `.secret.md` as a concept, or exporting `.DS_Store` as an artifact, are
+/// both the same mistake: treating the filesystem's own bookkeeping as knowledge. Both
+/// happened, in different walks, because each walk decided for itself.
+///
+/// One predicate, used by all three.
+fn is_hidden(name: &str) -> bool {
+    name.starts_with('.')
+}
+
 /// True when a filename is a concept rather than a generated artifact.
 ///
 /// `index.md` is generated and therefore not a concept. **`log.md` IS a concept** — reserving
@@ -61,7 +73,7 @@ pub const RAW_DIR: &str = "raw";
 /// such name, and narrowing the spec's tolerance is the failure mode this project treats as a
 /// bug rather than as strictness.
 fn is_concept_file(name: &str) -> bool {
-    name.ends_with(".md") && name != "index.md"
+    name.ends_with(".md") && name != "index.md" && !is_hidden(name)
 }
 
 fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
@@ -152,7 +164,7 @@ fn walk_all(root: &Path, dir: &Path, out: &mut Vec<String>) {
             if !name.starts_with('.') {
                 walk_all(root, &path, out);
             }
-        } else if path.is_file() {
+        } else if path.is_file() && !is_hidden(&name) {
             if let Ok(rel) = path.strip_prefix(root) {
                 out.push(to_slash(rel));
             }
@@ -178,7 +190,7 @@ fn walk_artifacts(root: &Path, dir: &Path, out: &mut Vec<String>) {
             if !skip_dir(&name) {
                 walk_artifacts(root, &path, out);
             }
-        } else if path.is_file() && !name.ends_with(".md") {
+        } else if path.is_file() && !name.ends_with(".md") && !is_hidden(&name) {
             if let Ok(rel) = path.strip_prefix(root) {
                 out.push(to_slash(rel));
             }
@@ -304,6 +316,26 @@ mod tests {
         fs::create_dir_all(t.path().join("_work")).unwrap();
         fs::write(t.path().join("_work/y.md"), b"---\ntype: Note\n---\n").unwrap();
         assert_eq!(FsBundle::new(t.path()).paths(), vec!["notes/a.md".to_string()]);
+    }
+
+    /// Dotfiles are invisible to every walk. Each of the three used to decide for itself, and
+    /// two of them got it wrong: `.secret.md` was indexed as a concept and `.DS_Store` was
+    /// exported as an artifact.
+    #[test]
+    fn dotfiles_are_invisible_to_every_walk() {
+        let t = tempfile::TempDir::new().unwrap();
+        fs::create_dir_all(t.path().join("notes")).unwrap();
+        fs::create_dir_all(t.path().join("raw")).unwrap();
+        fs::write(t.path().join("notes/real.md"), b"---\ntype: Note\n---\n").unwrap();
+        fs::write(t.path().join("notes/.secret.md"), b"---\ntype: Note\n---\n").unwrap();
+        fs::write(t.path().join("notes/.DS_Store"), b"junk").unwrap();
+        fs::write(t.path().join("raw/.gitkeep"), b"").unwrap();
+        fs::write(t.path().join("raw/source.txt"), b"real source").unwrap();
+
+        let b = FsBundle::new(t.path());
+        assert_eq!(b.paths(), vec!["notes/real.md".to_string()], "a dotted .md is not a concept");
+        assert!(b.artifact_paths().iter().all(|p| !p.contains("DS_Store")), "a dotfile is not an artifact");
+        assert_eq!(b.raw_paths(), vec!["raw/source.txt".to_string()], "a dotfile is not a source");
     }
 
     #[test]

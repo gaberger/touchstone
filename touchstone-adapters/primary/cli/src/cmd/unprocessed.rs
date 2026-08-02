@@ -4,10 +4,11 @@
 //! exactly when some concept names it in `sources`. No state file, nothing to fall out of sync,
 //! and deleting the derived plane changes nothing — the same rule the index follows.
 
+use crate::args::UnprocessedArgs;
 use touchstone_ports::{ConceptParser, ConceptRepository, RawStore};
 use touchstone_usecases::unprocessed_raw;
 
-pub fn run<F, P>(files: &F, parser: &P) -> i32
+pub fn run<F, P>(args: &UnprocessedArgs, files: &F, parser: &P) -> i32
 where
     F: ConceptRepository + RawStore,
     P: ConceptParser,
@@ -19,8 +20,18 @@ where
         println!("no raw documents. `touchstone ingest <file>` adds source material.");
         return 0;
     }
-    for p in &pending {
-        println!("{p}");
+    for p in pending.iter().take(args.limit) {
+        if args.content {
+            // Everything needed to compile, in one read: an agent that has to ask for the path
+            // and then ask again for the bytes has spent two round trips on one document.
+            let body = files
+                .raw_bytes(p)
+                .map(|b| String::from_utf8_lossy(&b).to_string())
+                .unwrap_or_default();
+            println!("--- {p}\n{body}");
+        } else {
+            println!("{p}");
+        }
     }
     println!("\n{} of {} raw documents uncited", pending.len(), total);
     if !pending.is_empty() {

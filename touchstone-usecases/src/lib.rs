@@ -1127,7 +1127,7 @@ where
     let _ = index.reresolve();
     let _ = index.commit();
 
-    report.indexes_written = write_indexes(files, &parsed);
+    report.indexes_written = write_indexes(files, files, &parsed);
     report.broken_links = index.broken_link_count();
     report
 }
@@ -1141,7 +1141,11 @@ fn resolved_links(path: &str, body: &str) -> Vec<String> {
 
 /// Regenerate `index.md` for every directory implied by the concept set, including ancestors
 /// that hold no concepts of their own.
-fn write_indexes<W: ConceptSink>(sink: &W, concepts: &[ParsedConcept]) -> usize {
+fn write_indexes<W: ConceptSink, R: RawStore>(
+    sink: &W,
+    store: &R,
+    concepts: &[ParsedConcept],
+) -> usize {
     use std::collections::{BTreeMap, HashSet};
 
     let mut by_dir: BTreeMap<String, Vec<&ParsedConcept>> = BTreeMap::new();
@@ -1196,6 +1200,17 @@ fn write_indexes<W: ConceptSink>(sink: &W, concepts: &[ParsedConcept]) -> usize 
         let here = by_dir.get(d).unwrap_or(&empty);
         let text = ports::render_index(d, here, &subdirs, d.is_empty());
         let rel = if d.is_empty() { "index.md".to_string() } else { format!("{d}/index.md") };
+
+        // Do not rewrite a file that already has these exact bytes.
+        //
+        // T1 asserts the CONTENT is byte-identical across a rebuild; this makes the WRITE
+        // idempotent too, which matters once anything is watching. `touchstone watch` fed
+        // itself otherwise: reindex rewrote every index.md, the filesystem reported a change,
+        // and that triggered the next reindex -- thirteen rebuilds for two captures, and worse
+        // on a bundle large enough for the passes to overlap.
+        if store.raw_bytes(&rel).as_deref() == Some(text.as_bytes()) {
+            continue;
+        }
         if sink.write(&rel, text.as_bytes()).is_ok() {
             written += 1;
         }
@@ -1404,15 +1419,29 @@ pub struct IngestReport {
 /// them, and the reading cites what it read.
 pub fn ingest_raw<W, R>(sources: &[(String, Vec<u8>)], sink: &W, repo: &R) -> IngestReport
 where
-    W: ConceptSink,
+    W: ConceptSink + RawStore,
     R: ConceptRepository,
 {
     let existing: std::collections::HashSet<String> = repo.raw_paths().into_iter().collect();
+    // Content digests of what is already ingested, so the same document arriving under a second
+    // name is recognised. Bulk-loading a real notes directory surfaces this immediately:
+    // exports, backups and sync copies mean duplicates are the norm, not the exception.
+    let mut seen: std::collections::HashMap<String, String> = existing
+        .iter()
+        .filter_map(|p| sink.raw_bytes(p).map(|b| (ports::fnv64(&b), p.clone())))
+        .collect();
     let mut report = IngestReport::default();
 
     for (name, bytes) in sources {
         let stem = name.rsplit('/').next().unwrap_or(name);
         let rel = format!("{RAW_DIR}/{stem}");
+        let digest = ports::fnv64(bytes);
+        if let Some(prior) = seen.get(&digest) {
+            if prior != &rel {
+                report.skipped.push((rel, format!("identical content already ingested as {prior}")));
+                continue;
+            }
+        }
         if existing.contains(&rel) {
             // Never overwrite. Raw material is immutable by definition -- if it changed, it is
             // a different document and deserves a different name.
@@ -1420,7 +1449,13 @@ where
             continue;
         }
         match sink.write(&rel, bytes) {
-            Ok(()) => report.ingested.push(rel),
+            Ok(()) => {
+                // Record it immediately: a bulk load of a real notes directory is full of
+                // duplicates arriving in the SAME batch -- exports, backups, sync copies -- and
+                // a digest map built only from what was on disk beforehand misses every one.
+                seen.insert(digest, rel.clone());
+                report.ingested.push(rel);
+            }
             Err(e) => report.skipped.push((rel, e)),
         }
     }
