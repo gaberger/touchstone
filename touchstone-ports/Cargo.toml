@@ -1,0 +1,8 @@
+# Layer 2 -- ports. Domain only.
+[package]
+name = "touchstone-ports"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+touchstone-domain = { path = "../touchstone-domain" }

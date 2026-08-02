@@ -85,10 +85,10 @@ authorization to be pushed into the query planner.
 
 | Phase | Description | Status | Verification |
 |-------|------------|--------|--------------|
-| P1 | Ranking policy as a pure domain function — depth, trust boost, staleness penalty | Pending | code:okf-domain/src/ranking.rs, test:cargo test -p okf-domain ranking |
-| P2 | `SearchIndex` port over-retrieves to `max(limit*50, 500)` | Pending | code:okf-ports/src/search.rs, test:cargo test -p sqlite-index depth |
-| P3 | Structured filter binds to graph-expansion stage, not only BM25 | Pending | code:okf-usecases/src/search.rs, test:cargo test -p okf-usecases expansion_respects_filter |
-| P4 | ACL-aware recall harness reproducing the simulation on a real corpus + ANN | Pending | code:okf-conformance/tests/acl_recall.rs, test:cargo test -p okf-conformance acl_recall |
+| P1 | Ranking policy as a pure domain function — depth, trust boost, staleness penalty | Pending | code:touchstone-domain/src/ranking.rs, test:cargo test -p touchstone-domain ranking |
+| P2 | `SearchIndex` port over-retrieves to `max(limit*50, 500)` | Pending | code:touchstone-ports/src/search.rs, test:cargo test -p sqlite-index depth |
+| P3 | Structured filter binds to graph-expansion stage, not only BM25 | Pending | code:touchstone-usecases/src/search.rs, test:cargo test -p touchstone-usecases expansion_respects_filter |
+| P4 | ACL-aware recall harness reproducing the simulation on a real corpus + ANN | Pending | code:touchstone-conformance/tests/acl_recall.rs, test:cargo test -p touchstone-conformance acl_recall |
 
 ## References
 

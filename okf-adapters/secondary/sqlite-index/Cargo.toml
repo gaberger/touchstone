@@ -1,9 +1,0 @@
-# Secondary adapter for SearchIndex. Ports only.
-[package]
-name = "okf-sqlite-index"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-okf-ports = { path = "../../../okf-ports" }
-rusqlite = { version = "0.40", features = ["bundled"] }

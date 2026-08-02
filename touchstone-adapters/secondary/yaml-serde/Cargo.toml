@@ -1,0 +1,13 @@
+# Secondary adapter for FrontmatterParser. Ports only.
+[package]
+name = "touchstone-yaml-serde"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+touchstone-ports = { path = "../../../touchstone-ports" }
+serde_yaml_ng = "0.10.0"
+# Used only to escape strings when emitting the frontmatter-as-JSON view. Deliberately not
+# used to *re-encode* values: routing scalars through a typed intermediate is exactly where
+# an ISO 8601 timestamp would stop being a string (FINDINGS E3a).
+serde_json = "1"

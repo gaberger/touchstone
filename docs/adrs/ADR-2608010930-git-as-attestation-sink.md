@@ -102,12 +102,12 @@ before committing to a rewrite.**
 
 | Phase | Description | Status | Verification |
 |-------|------------|--------|--------------|
-| P1 | `VersionControl` port + gix adapter; confirm commit-signing support before committing to gix | Pending | code:okf-adapters/secondary/git-attest/src/lib.rs, test:cargo test -p git-attest signing |
-| P2 | CI gate rejecting unsigned `verified` deltas | Pending | code:.github/workflows/verified-signing.yml, test:cargo test -p okf-conformance verified_signing |
-| P3 | Duplicate-entry lint (the measured 16% defect) | Pending | code:okf-domain/src/lint.rs, test:cargo test -p okf-domain lint_duplicates |
-| P4 | `SyncEngine` port + CRDT adapter, typed frontmatter map with set-merge semantics | Pending | code:okf-adapters/secondary/crdt-sync/src/lib.rs, test:cargo test -p crdt-sync set_merge |
-| P5 | Checkpoint materializes conformant OKF markdown to disk | Pending | code:okf-usecases/src/checkpoint.rs, test:cargo test -p okf-conformance checkpoint_materializes |
-| P6 | Latency measurement against the kill criterion | Pending | test:cargo bench -p okf-conformance checkpoint_50k |
+| P1 | `VersionControl` port + gix adapter; confirm commit-signing support before committing to gix | Pending | code:touchstone-adapters/secondary/git-attest/src/lib.rs, test:cargo test -p git-attest signing |
+| P2 | CI gate rejecting unsigned `verified` deltas | Pending | code:.github/workflows/verified-signing.yml, test:cargo test -p touchstone-conformance verified_signing |
+| P3 | Duplicate-entry lint (the measured 16% defect) | Pending | code:touchstone-domain/src/lint.rs, test:cargo test -p touchstone-domain lint_duplicates |
+| P4 | `SyncEngine` port + CRDT adapter, typed frontmatter map with set-merge semantics | Pending | code:touchstone-adapters/secondary/crdt-sync/src/lib.rs, test:cargo test -p crdt-sync set_merge |
+| P5 | Checkpoint materializes conformant OKF markdown to disk | Pending | code:touchstone-usecases/src/checkpoint.rs, test:cargo test -p touchstone-conformance checkpoint_materializes |
+| P6 | Latency measurement against the kill criterion | Pending | test:cargo bench -p touchstone-conformance checkpoint_50k |
 
 ## References
 

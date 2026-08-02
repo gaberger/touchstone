@@ -16,7 +16,7 @@ topic reached ~100 articles and 400,000 words nobody typed.
 The architecture is right, and this project is the same shape. What the pattern leaves open
 is what happens once most of your knowledge base is machine-written:
 
-| the pattern | what is missing | what okf adds |
+| the pattern | what is missing | what Touchstone adds |
 |---|---|---|
 | `raw/` is authoritative | — | same rule: raw bytes are truth, frontmatter is a query view |
 | `wiki/` is regenerable | — | A1, enforced by the T1 drill |
@@ -48,21 +48,22 @@ tested; the two highest-risk assumptions are not yet answered.
 
 **Touchstone is a Rust project, and now only a Rust project.** The implementation lives in a
 13-crate hexagonal workspace whose layering is enforced by Cargo itself — a boundary violation is a
-compile error, not a lint (`okf-cli/tests/architecture.rs` guards the dependency graph that makes
+compile error, not a lint (`touchstone-cli/tests/architecture.rs` guards the dependency graph that makes
 that true).
 
 | layer | crate | state |
 |---|---|---|
-| domain | `okf-domain` | types only, zero dependencies |
-| ports | `okf-ports` | 7 traits |
-| use cases | `okf-usecases` | **done** |
-| adapters | `okf-yaml-serde` FrontmatterParser | **done** — temporal values stay ISO 8601 strings (E3a) |
-| | `okf-fs-bundle` ConceptRepository | **done** — `log.md` is a concept, not a reserved name (E4a) |
-| | `okf-sqlite-index` SearchIndex | **done** — FTS5 + structured prefilter |
-| | `okf-git-attest` VersionControl | **done** |
+| domain | `touchstone-domain` | types only, zero dependencies |
+| ports | `touchstone-ports` | 7 traits |
+| use cases | `touchstone-usecases` | **done** |
+| adapters | `touchstone-yaml-serde` FrontmatterParser | **done** — temporal values stay ISO 8601 strings (E3a) |
+| | `touchstone-fs-bundle` ConceptRepository | **done** — `log.md` is a concept, not a reserved name (E4a) |
+| | `touchstone-sqlite-index` SearchIndex | **done** — FTS5 + structured prefilter |
+| | `touchstone-git-attest` VersionControl | **done** |
 | | `crdt-sync`, `embed-local` | deferred — gated on A7 and A4, untested assumptions |
-| composition | `okf-cli` | **done** — full command surface |
-| conformance | `okf-conformance` | **done** — the drills, as a black-box gate |
+| composition | `touchstone-cli` | **done** — full command surface |
+| conformance | `touchstone-conformance` | **done** — the drills, as a black-box gate |
+| primary | `touchstone-mcp-adapter` | **done** — MCP 2026-07-28, graded for agents |
 
 ```bash
 cargo build --release --bin touchstone   # the conformance suite drives this binary
@@ -81,16 +82,16 @@ What the oracle was for did not go away, so it was moved rather than dropped:
 
 | the oracle provided | now provided by |
 |---|---|
-| the ten drills | `okf-conformance`, driving the binary as a black box |
+| the ten drills | `touchstone-conformance`, driving the binary as a black box |
 | a second opinion on ambiguous bytes | the drills assert the property directly instead of by comparison |
-| E4a (`log.md` is a concept) | an assertion in `okf-conformance/tests/fixture.rs` |
-| E4b (A1 fails on concept-free dirs) | a recorded known-defect in `okf-conformance/tests/drills.rs` |
+| E4a (`log.md` is a concept) | an assertion in `touchstone-conformance/tests/fixture.rs` |
+| E4b (A1 fails on concept-free dirs) | a recorded known-defect in `touchstone-conformance/tests/drills.rs` |
 
-Because the suite names no `okf-*` crate — a rule the architecture test enforces — it can gate an
+Because the suite names no `touchstone-*` crate — a rule the architecture test enforces — it can gate an
 implementation it did not compile:
 
 ```bash
-TOUCHSTONE_BIN=/path/to/other/impl cargo test -p okf-conformance
+TOUCHSTONE_BIN=/path/to/other/impl cargo test -p touchstone-conformance
 ```
 
 That is the property the differential used to provide, generalised: any implementation can be held
@@ -108,8 +109,42 @@ to the same drills, not just the two that happened to exist.
 | `touchstone export <dir>` | Write raw bytes back out. Byte-exact by construction |
 | `touchstone stats` | Concepts by type, trust tier, status; link and broken-link counts |
 | `touchstone show <path>` | One concept's derived view. `--json` emits parsed frontmatter verbatim |
+| `touchstone mcp [--http ADDR]` | Serve the MCP tool surface. stdio by default; Streamable HTTP on request |
 
 Filters: `--type`, `--tag`, `--status`, `--trust`, `--limit`, `--no-expand`.
+
+## For agents: the MCP surface
+
+```bash
+touchstone --bundle ~/brain mcp                      # stdio, for a local agent
+touchstone --bundle ~/brain mcp --http 127.0.0.1:8765 # Streamable HTTP
+```
+
+Nine tools at MCP revision **2026-07-28**, each with input *and* output schemas, structured
+content, and annotations so a client knows which calls need human confirmation:
+`discover`, `search`, `show`, `stats`, `index`, `lint`, `fmt`, `new`, `export`.
+
+The surface is graded against [api-ai-readiness](https://github.com/gaberger/api-ai-readiness),
+and the gradeable part is a **test**, not a report — see
+`touchstone-adapters/primary/mcp/tests/ai_readiness.rs`:
+
+| Dimension | What the surface does |
+|---|---|
+| Response discipline | `limit` with a declared default of 10, ceiling 200; results carry `total`/`returned`, never a bare array |
+| Field selection | `fields` on every result-bearing tool — ask for `["path"]` and get paths |
+| Retrieval shape | `type`/`tag`/`status`/`trust` filter inside the query, not after |
+| Self-description | recoverable failures say *what to do next*; only an unknown tool is a protocol error |
+| Workflow atomicity | a concept path is the only identifier, and one call gets you one |
+| Discovery | `touchstone_discover`, callable with no arguments |
+
+**Parity is enforced.** `tests/parity.rs` fails the build if a CLI command has no MCP tool or
+vice versa — the check [hex ADR-019](https://github.com/gaberger/hex/blob/main/docs/adrs/ADR-019-cli-mcp-parity.md)
+specifies and leaves unimplemented. A human can do everything an agent can, and the reverse.
+
+**No tool can write `verified`.** A concept an agent creates is `machine`, never `human`.
+
+> **The HTTP transport has no authentication** and can read *and write* the bundle. stdio is the
+> default for that reason. Bind HTTP to loopback, or put auth in front of it.
 
 ## Design rules
 

@@ -1,0 +1,11 @@
+# Secondary adapter for ConceptRepository. Ports only.
+[package]
+name = "touchstone-fs-bundle"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+touchstone-ports = { path = "../../../touchstone-ports" }
+
+[dev-dependencies]
+tempfile = "3"

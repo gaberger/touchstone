@@ -50,21 +50,21 @@ compilation targets, and the direction is settled — by architecture, not by be
 
 ## Decision
 
-We will build **okf-brain as a Rust workspace conforming to hex's hexagonal architecture**
+We will build **Touchstone as a Rust workspace conforming to hex's hexagonal architecture**
 ([hex ADR-001](https://github.com/gaberger/hex/blob/main/docs/adrs/ADR-001-hexagonal-architecture.md)),
 and we will make the **frontmatter parser a port**.
 
 Crate layout, obeying hex's seven enforced rules:
 
 ```
-okf-domain/     pure — Concept, conformance floor, trust tiers, link resolution,
+touchstone-domain/     pure — Concept, conformance floor, trust tiers, link resolution,
                 ranking policy, index.md rendering, lint. Zero external crates.
-okf-ports/      FrontmatterParser · ConceptRepository · SearchIndex ·
+touchstone-ports/      FrontmatterParser · ConceptRepository · SearchIndex ·
                 VersionControl · SyncEngine · Embedder · Clock
-okf-usecases/   IndexBundle · SearchBundle · CaptureConcept · LintBundle · ExportBundle
-okf-adapters/primary/{cli,mcp}
-okf-adapters/secondary/{yaml-serde,fs-bundle,sqlite-index,git-attest,crdt-sync,embed-local}
-okf-cli/        composition root — the ONLY crate importing adapters
+touchstone-usecases/   IndexBundle · SearchBundle · CaptureConcept · LintBundle · ExportBundle
+touchstone-adapters/primary/{cli,mcp}
+touchstone-adapters/secondary/{yaml-serde,fs-bundle,sqlite-index,git-attest,crdt-sync,embed-local}
+touchstone-cli/        composition root — the ONLY crate importing adapters
 ```
 
 **The parser is a port because parsers disagree.** Consequences:
@@ -108,13 +108,13 @@ Rust conformance suite reproduces all ten drills.
 
 | Phase | Description | Status | Verification |
 |-------|------------|--------|--------------|
-| P1 | Workspace scaffold; hex boundary rules pass with zero violations | Completed | code:Cargo.toml, test:cargo test -p okf-cli --test architecture |
-| P2 | `okf-domain` — pure, zero external crates | Completed | code:okf-domain/src/lib.rs, test:cargo test -p okf-domain |
-| P3 | `okf-ports` — traits only, imports domain for value types only | Completed | code:okf-ports/src/lib.rs, test:cargo check -p okf-ports |
-| P4 | `yaml-serde` adapter + **parser port-contract suite incl. merge-key behaviour** | Pending — adapter done, contract suite outstanding (ADR-2608010950 P4) | code:okf-adapters/secondary/yaml-serde/src/lib.rs, test:cargo test -p okf-conformance parser_contract |
-| P5 | `fs-bundle` + `sqlite-index` adapters | Completed | code:okf-adapters/secondary/sqlite-index/src/lib.rs, test:cargo test -p okf-sqlite-index |
-| P6 | `okf-cli` composition root; CLI-MCP parity per hex ADR-019 | Pending — CLI complete, MCP surface is still a stub | code:okf-cli/src/main.rs, test:cargo test -p okf-cli parity |
-| P7 | Rust suite reproduces all 10 Python drills; retire the oracle | Completed — FINDINGS E6 | test:cargo test -p okf-conformance |
+| P1 | Workspace scaffold; hex boundary rules pass with zero violations | Completed | code:Cargo.toml, test:cargo test -p touchstone-cli --test architecture |
+| P2 | `touchstone-domain` — pure, zero external crates | Completed | code:touchstone-domain/src/lib.rs, test:cargo test -p touchstone-domain |
+| P3 | `touchstone-ports` — traits only, imports domain for value types only | Completed | code:touchstone-ports/src/lib.rs, test:cargo check -p touchstone-ports |
+| P4 | `yaml-serde` adapter + **parser port-contract suite incl. merge-key behaviour** | Pending — adapter done, contract suite outstanding (ADR-2608010950 P4) | code:touchstone-adapters/secondary/yaml-serde/src/lib.rs, test:cargo test -p touchstone-conformance parser_contract |
+| P5 | `fs-bundle` + `sqlite-index` adapters | Completed | code:touchstone-adapters/secondary/sqlite-index/src/lib.rs, test:cargo test -p touchstone-sqlite-index |
+| P6 | `touchstone-cli` composition root; CLI-MCP parity per hex ADR-019 | Completed — ADR-2608021132 | code:touchstone-cli/src/main.rs, test:cargo test -p touchstone-cli parity |
+| P7 | Rust suite reproduces all 10 Python drills; retire the oracle | Completed — FINDINGS E6 | test:cargo test -p touchstone-conformance |
 
 ## References
 

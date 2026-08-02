@@ -1,25 +1,25 @@
-# okf Rust workspace.
+# Touchstone Rust workspace.
 #
 # The hexagonal rules in ARCHITECTURE.md are enforced by THIS dependency graph, not by a linter:
 # a crate can only import what its [dependencies] declare, so a violation is a COMPILE ERROR.
-# Cargo also forbids dependency cycles outright. `okf-cli/tests/architecture.rs` guards the graph
+# Cargo also forbids dependency cycles outright. `touchstone-cli/tests/architecture.rs` guards the graph
 # itself, so the enforcement cannot be quietly relaxed by adding a dependency.
 [workspace]
 resolver = "2"
 members = [
-  "okf-domain",
-  "okf-ports",
-  "okf-usecases",
-  "okf-adapters/primary/cli",
-  "okf-adapters/primary/mcp",
-  "okf-adapters/secondary/yaml-serde",
-  "okf-adapters/secondary/fs-bundle",
-  "okf-adapters/secondary/sqlite-index",
-  "okf-adapters/secondary/git-attest",
-  "okf-adapters/secondary/crdt-sync",
-  "okf-adapters/secondary/embed-local",
-  "okf-cli",
-  "okf-conformance",
+  "touchstone-domain",
+  "touchstone-ports",
+  "touchstone-usecases",
+  "touchstone-adapters/primary/cli",
+  "touchstone-adapters/primary/mcp",
+  "touchstone-adapters/secondary/yaml-serde",
+  "touchstone-adapters/secondary/fs-bundle",
+  "touchstone-adapters/secondary/sqlite-index",
+  "touchstone-adapters/secondary/git-attest",
+  "touchstone-adapters/secondary/crdt-sync",
+  "touchstone-adapters/secondary/embed-local",
+  "touchstone-cli",
+  "touchstone-conformance",
 ]
 
 [workspace.package]

@@ -8,11 +8,11 @@
 # bundle, with a KNOWN_DIVERGENCE table recording the disagreements FINDINGS.md had adjudicated.
 # That was the right check while a second implementation existed, because a divergence is only
 # information if you already know which side should win. The Python oracle is gone (FINDINGS E6),
-# so there is nothing left to differ from, and the differential is replaced by `okf-conformance` --
+# so there is nothing left to differ from, and the differential is replaced by `touchstone-conformance` --
 # which asserts the same properties directly instead of by comparison, and keeps working when
 # there is only one implementation. What the oracle taught us did not go with it: E4a is now an
-# assertion in okf-conformance/tests/fixture.rs, and E4b is a recorded known-defect in
-# okf-conformance/tests/drills.rs rather than a table entry here.
+# assertion in touchstone-conformance/tests/fixture.rs, and E4b is a recorded known-defect in
+# touchstone-conformance/tests/drills.rs rather than a table entry here.
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 2
@@ -56,16 +56,16 @@ head_ "Conformance"
 # the trust invariant, and search. Every drill runs against every bundle, on a copy.
 # --nocapture so recorded-defect (XFAIL) lines reach this script; cargo swallows them otherwise,
 # and a known defect nobody sees is indistinguishable from one nobody has.
-conf=$(cargo test -p okf-conformance -- --nocapture 2>&1)
+conf=$(cargo test -p touchstone-conformance -- --nocapture 2>&1)
 ct=$(echo "$conf" | grep -E "^test result:" | awk '{p+=$4; f+=$6} END {print p" "f}')
 cp_=${ct% *}; cf=${ct#* }
 if [ "${cf:-1}" = "0" ] && [ "${cp_:-0}" -gt 0 ]; then
-  ok "cargo test -p okf-conformance ($cp_ passed)"
+  ok "cargo test -p touchstone-conformance ($cp_ passed)"
   # Surface recorded-but-unfixed defects. They are not failures, but a gate that prints only
   # green hides the fact that a load-bearing claim is still falsified.
   echo "$conf" | grep -E "^\s+XFAIL" | while IFS= read -r l; do note "${l#  }"; done
 else
-  bad "cargo test -p okf-conformance" "$cp_ passed, $cf failed"
+  bad "cargo test -p touchstone-conformance" "$cp_ passed, $cf failed"
   echo "$conf" | grep -E "^\s+(FAIL|FIXED)" | head -8 | while IFS= read -r l; do note "${l#  }"; done
 fi
 

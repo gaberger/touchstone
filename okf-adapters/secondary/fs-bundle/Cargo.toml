@@ -1,8 +1,0 @@
-# Secondary adapter for ConceptRepository. Ports only.
-[package]
-name = "okf-fs-bundle"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-okf-ports = { path = "../../../okf-ports" }

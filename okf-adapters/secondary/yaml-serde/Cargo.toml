@@ -1,9 +1,0 @@
-# Secondary adapter for FrontmatterParser. Ports only.
-[package]
-name = "okf-yaml-serde"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-okf-ports = { path = "../../../okf-ports" }
-serde_yaml_ng = "0.10.0"

@@ -1,8 +1,0 @@
-# Layer 2 -- ports. Domain only.
-[package]
-name = "okf-ports"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-okf-domain = { path = "../okf-domain" }

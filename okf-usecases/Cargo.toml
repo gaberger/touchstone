@@ -1,9 +1,0 @@
-# Layer 3 -- usecases. Domain + ports only (plus external crates -- ARCHITECTURE.md rule 3).
-[package]
-name = "okf-usecases"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-okf-domain = { path = "../okf-domain" }
-okf-ports = { path = "../okf-ports" }

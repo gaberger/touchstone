@@ -1,0 +1,8 @@
+# Secondary adapter for SyncEngine. Ports only.
+[package]
+name = "touchstone-crdt-sync"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+touchstone-ports = { path = "../../../touchstone-ports" }
