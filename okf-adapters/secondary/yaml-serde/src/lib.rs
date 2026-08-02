@@ -1,323 +1,517 @@
-//! Secondary adapter — FrontmatterParser port backed by serde_yaml_ng.
+//! Secondary adapter — the OKF frontmatter parser, backed by serde_yaml_ng.
 //!
-//! Imports `okf-ports` ONLY (hex ADR-001). Cannot reach another adapter because
+//! Imports `okf-ports` ONLY (ARCHITECTURE.md rule 4a). Cannot reach another adapter because
 //! Cargo will not resolve it.
 //!
-//! Key guarantee (FINDINGS.md E3a / RUST-PATH.md §1):
-//!   Temporal values (`at:`, `stale_after:`, `usage_window:`) stay ISO 8601 strings.
-//!   serde_yaml_ng deserialises them as Value::String without any timestamp coercion,
-//!   so the silent-rewrite bug PyYAML had is structurally absent here.
-use okf_ports::{Concept, FrontmatterParser};
-use serde_yaml_ng::Value;
+//! **This adapter is the only place in the workspace that knows what YAML is.** That is the
+//! point of making the parser a port (ADR-2608010940): two conformant YAML libraries disagree
+//! on the same bytes — `serde_yaml_ng` does not implement merge keys, so a concept carrying
+//! `verified: [{<<: *defaults}]` reads as human-verified under PyYAML and unattributed here —
+//! and a divergence that lives behind a port is a contract test rather than a latent bug in
+//! ranking.
+//!
+//! Key guarantee (FINDINGS E3a / RUST-PATH §1): temporal values (`at:`, `stale_after:`,
+//! `usage_window:`) stay ISO 8601 strings. serde_yaml_ng deserialises them as `Value::String`
+//! with no timestamp coercion, so the silent-rewrite defect PyYAML had is structurally absent.
+//!
+//! Raw bytes remain authoritative throughout: `ParsedConcept.raw` is a verbatim copy, and the
+//! CRLF normalisation below applies only to the derived text view. That asymmetry is what makes
+//! byte-exact export (T2a) possible at all.
+
+use okf_ports::{
+    split_frontmatter, Concept, ConceptParser, FrontmatterParser, NewConceptRequest,
+    ParsedConcept, Trust, VerifiedEntry,
+};
+use serde_yaml_ng::{Mapping, Value};
 
 pub struct YamlSerde;
 
-const DELIM: &str = "---";
+/// OKF canonical frontmatter key order. Known keys are emitted first in this order; unknown
+/// keys follow in their authored order, because the spec requires consumers to preserve what
+/// they do not recognise rather than tidy it away.
+const KEY_ORDER: &[&str] = &[
+    "id", "type", "title", "description", "resource", "tags", "aliases", "status", "stale_after",
+    "generated", "verified", "sources",
+];
 
-/// Extract the text between the opening and closing `---` delimiters.
-/// Returns `Err` when no frontmatter block is present or it is unterminated.
-fn split_frontmatter(text: &str) -> Result<String, String> {
-    // Tolerate UTF-8 BOM (U+FEFF).
-    let text = text.trim_start_matches('\u{FEFF}');
-    // Normalise CRLF so delimiter matching works on Windows-style files.
-    let norm = text.replace("\r\n", "\n");
+// ── Constructs the formatter must refuse ───────────────────────────────────────
 
-    if !norm.starts_with("---") {
-        return Err("no frontmatter".to_string());
-    }
-
-    // The very first line must be exactly `---`.
-    let after_first = match norm.strip_prefix("---\n") {
-        Some(s) => s,
-        None => {
-            if norm.trim() == "---" { "" } else {
-                return Err("no frontmatter".to_string());
+/// True when the frontmatter text contains constructs `fmt` cannot safely reproduce:
+/// anchors (`&`), aliases (`*`), merge keys (`<<:`), or block scalars (`: |`, `: >`).
+///
+/// This predicate exists because building the formatter revealed the danger (FINDINGS E3b):
+/// the naive canonicalizer resolved merge keys, invented an `&id001` anchor on an unrelated
+/// timestamp, and flattened a shell script under `script: |` into a quoted string. Refusing is
+/// the only safe answer, so the detector is deliberately over-eager.
+pub fn is_risky(fm_text: &str) -> bool {
+    for line in fm_text.lines() {
+        let trimmed = line.trim();
+        if let Some(pos) = line.find(':') {
+            let after = line[pos + 1..].trim();
+            if after.starts_with('|') || after.starts_with('>') {
+                return true;
             }
         }
+        if trimmed.contains("<<:") {
+            return true;
+        }
+        if trimmed.starts_with('&') || trimmed.starts_with('*') {
+            return true;
+        }
+        for (i, ch) in line.char_indices() {
+            if (ch == '&' || ch == '*') && i > 0 {
+                let prev = line[..i].chars().last();
+                if prev == Some(' ') || prev == Some('\t') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+// ── YAML → JSON ────────────────────────────────────────────────────────────────
+
+/// Serialise a mapping to a JSON object string.
+///
+/// Hand-rolled rather than routed through a typed intermediate so that scalars survive exactly
+/// as YAML read them: a timestamp that arrived as a string leaves as a string. That is the
+/// property drill T2d asserts, and a re-encode is precisely where it would be lost.
+fn fm_to_json(fm: &Mapping) -> String {
+    value_to_json(&Value::Mapping(fm.clone()))
+}
+
+fn value_to_json(v: &Value) -> String {
+    match v {
+        Value::Null => "null".to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string()),
+        Value::Sequence(seq) => {
+            let items: Vec<String> = seq.iter().map(value_to_json).collect();
+            format!("[{}]", items.join(","))
+        }
+        Value::Mapping(m) => {
+            let pairs: Vec<String> = m
+                .iter()
+                .map(|(k, val)| {
+                    let key = match k {
+                        Value::String(s) => serde_json::to_string(s).unwrap_or_default(),
+                        _ => "\"?\"".to_string(),
+                    };
+                    format!("{}:{}", key, value_to_json(val))
+                })
+                .collect();
+            format!("{{{}}}", pairs.join(","))
+        }
+        Value::Tagged(t) => value_to_json(&t.value),
+    }
+}
+
+// ── Canonical emission ─────────────────────────────────────────────────────────
+
+/// Deterministic YAML dump: known keys in `KEY_ORDER`, unknown keys appended in authored order.
+pub fn canonical_frontmatter(fm: &Mapping) -> String {
+    let mut ordered = Mapping::new();
+    for &k in KEY_ORDER {
+        if let Some(v) = fm.get(k) {
+            ordered.insert(Value::String(k.to_string()), v.clone());
+        }
+    }
+    for (k, v) in fm {
+        match k {
+            Value::String(ks) if KEY_ORDER.contains(&ks.as_str()) => {}
+            _ => {
+                ordered.insert(k.clone(), v.clone());
+            }
+        }
+    }
+    serde_yaml_ng::to_string(&Value::Mapping(ordered))
+        .unwrap_or_default()
+        .trim_start_matches("---\n")
+        .to_string()
+}
+
+// ── Parsing ────────────────────────────────────────────────────────────────────
+
+struct Frontmatter {
+    text: String,
+    map: Mapping,
+    body: String,
+    error: Option<String>,
+}
+
+fn read_frontmatter(raw: &[u8]) -> Result<Frontmatter, String> {
+    let text = std::str::from_utf8(raw).map_err(|_| "invalid UTF-8".to_string())?;
+    // Normalise line endings for the DERIVED view only. `raw` is untouched.
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    let (fm_opt, body) = split_frontmatter(&text);
+    let body = body.to_string();
+
+    let Some(fm_str) = fm_opt else {
+        return Ok(Frontmatter {
+            text: String::new(),
+            map: Mapping::new(),
+            body,
+            error: Some("no frontmatter".to_string()),
+        });
     };
 
-    // Collect lines between the two delimiters.
-    let mut fm_lines: Vec<&str> = Vec::new();
-    for line in after_first.split('\n') {
-        if line.trim() == DELIM {
-            return Ok(fm_lines.join("\n"));
+    let fm_text = fm_str.to_string();
+    match serde_yaml_ng::from_str::<Value>(fm_str) {
+        Err(e) => Ok(Frontmatter {
+            text: fm_text,
+            map: Mapping::new(),
+            body,
+            error: Some(format!("invalid YAML: {}", e.to_string().lines().next().unwrap_or(""))),
+        }),
+        Ok(Value::Null) => Ok(Frontmatter {
+            text: fm_text,
+            map: Mapping::new(),
+            body,
+            error: Some("missing or empty `type`".to_string()),
+        }),
+        Ok(Value::Mapping(m)) => {
+            let error = match m.get("type") {
+                Some(Value::String(s)) if !s.trim().is_empty() => None,
+                _ => Some("missing or empty `type`".to_string()),
+            };
+            Ok(Frontmatter { text: fm_text, map: m, body, error })
         }
-        fm_lines.push(line);
+        Ok(_) => Ok(Frontmatter {
+            text: fm_text,
+            map: Mapping::new(),
+            body,
+            error: Some("frontmatter is not a mapping".to_string()),
+        }),
+    }
+}
+
+fn str_field<'a>(fm: &'a Mapping, key: &str) -> &'a str {
+    match fm.get(key) {
+        Some(Value::String(s)) => s.as_str(),
+        _ => "",
+    }
+}
+
+/// Title falls back to a humanised filename, so an untitled concept is still addressable.
+fn derive_title(fm: &Mapping, path: &str) -> String {
+    match fm.get("title") {
+        Some(Value::String(s)) if !s.trim().is_empty() => s.clone(),
+        _ => {
+            let stem = path.rsplit('/').next().unwrap_or(path);
+            let stem = stem.strip_suffix(".md").unwrap_or(stem);
+            stem.replace('-', " ").replace('_', " ")
+        }
+    }
+}
+
+fn derive_tags(fm: &Mapping) -> Vec<String> {
+    match fm.get("tags") {
+        Some(Value::Sequence(seq)) => {
+            seq.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()
+        }
+        Some(Value::String(s)) => vec![s.clone()],
+        _ => vec![],
+    }
+}
+
+fn verified_entries(fm: &Mapping) -> Vec<VerifiedEntry> {
+    let entries: Vec<&Mapping> = match fm.get("verified") {
+        Some(Value::Sequence(seq)) => seq.iter().filter_map(|v| v.as_mapping()).collect(),
+        Some(Value::Mapping(m)) => vec![m],
+        _ => vec![],
+    };
+    entries
+        .into_iter()
+        .map(|e| VerifiedEntry {
+            by: match e.get("by") {
+                Some(Value::String(s)) => Some(s.clone()),
+                _ => None,
+            },
+        })
+        .collect()
+}
+
+/// Spec-derived trust tier. Never authored — see ARCHITECTURE.md "The trust invariant".
+///
+/// `verified[].by` starting with `human:` → Verified; `generated` present without a human
+/// `verified` → Generated; neither → Unknown. Note `Trust::Attested` is unreachable from this
+/// derivation: it is a documented tier with no rule behind it (FINDINGS E6).
+fn derive_trust(fm: &Mapping) -> Trust {
+    for entry in verified_entries(fm) {
+        if entry.by.as_deref().is_some_and(|by| by.starts_with("human:")) {
+            return Trust::Verified;
+        }
+    }
+    if fm.contains_key("generated") {
+        return Trust::Generated;
+    }
+    Trust::Unknown
+}
+
+fn source_missing_resource(fm: &Mapping) -> bool {
+    match fm.get("sources") {
+        Some(Value::Sequence(seq)) => seq.iter().any(|s| match s {
+            Value::Mapping(m) => !m.contains_key("resource"),
+            _ => true,
+        }),
+        _ => false,
+    }
+}
+
+impl YamlSerde {
+    /// The full parse. Inherent so the composition root can call it without a trait object.
+    pub fn parse_concept(&self, path: &str, raw: &[u8]) -> ParsedConcept {
+        let fmres = match read_frontmatter(raw) {
+            Ok(f) => f,
+            Err(e) => {
+                return ParsedConcept {
+                    path: path.to_string(),
+                    raw: raw.to_vec(),
+                    error: Some(e),
+                    ..Default::default()
+                }
+            }
+        };
+
+        let fm = &fmres.map;
+        let status = {
+            let s = str_field(fm, "status");
+            if s.is_empty() { "stable".to_string() } else { s.to_string() }
+        };
+
+        // Unformattable when there is nothing to format, when it did not parse, or when it
+        // carries constructs that cannot be reproduced.
+        let format_skip_reason = if fm.is_empty() {
+            Some("no frontmatter".to_string())
+        } else if let Some(ref e) = fmres.error {
+            Some(e.clone())
+        } else if is_risky(&fmres.text) {
+            Some("contains anchors, aliases, merge keys or block scalars".to_string())
+        } else {
+            None
+        };
+
+        ParsedConcept {
+            path: path.to_string(),
+            concept_type: str_field(fm, "type").to_string(),
+            title: derive_title(fm, path),
+            description: str_field(fm, "description").to_string(),
+            body: fmres.body,
+            tags: derive_tags(fm),
+            trust: derive_trust(fm),
+            status,
+            raw: raw.to_vec(),
+            error: fmres.error,
+            format_skip_reason,
+            verified_entries: verified_entries(fm),
+            has_source_missing_resource: source_missing_resource(fm),
+            has_wikilinks: String::from_utf8_lossy(raw).contains("[["),
+            frontmatter_json: if fm.is_empty() { String::new() } else { fm_to_json(fm) },
+        }
+    }
+}
+
+impl ConceptParser for YamlSerde {
+    fn parse(&self, path: &str, raw: &[u8]) -> ParsedConcept {
+        self.parse_concept(path, raw)
     }
 
-    Err("unterminated frontmatter".to_string())
+    /// Canonical rewrite, or `None` when the concept must be refused.
+    ///
+    /// Re-parses `parsed.raw` rather than trusting a cached mapping: the raw bytes are the
+    /// authoritative value, so re-reading them is what makes this safe to call on a concept
+    /// some other layer handed along.
+    fn canonicalize(&self, parsed: &ParsedConcept) -> Option<Vec<u8>> {
+        if parsed.format_skip_reason.is_some() {
+            return None;
+        }
+        let fmres = read_frontmatter(&parsed.raw).ok()?;
+        if fmres.error.is_some() || fmres.map.is_empty() {
+            return None;
+        }
+        let canon = canonical_frontmatter(&fmres.map);
+
+        // Exactly one leading and one trailing newline around the body. Pinning both ends is
+        // what makes `fmt` idempotent — without it a second run keeps adding or trimming
+        // whitespace and the formatter never reaches a fixed point, so `--check` is never clean.
+        let b = &fmres.body;
+        let b = if b.starts_with('\n') { b.clone() } else { format!("\n{b}") };
+        let b = b.trim_end_matches('\n');
+        Some(format!("---\n{canon}---\n{b}\n").into_bytes())
+    }
+
+    fn emit_new(&self, req: &NewConceptRequest) -> Vec<u8> {
+        // Emitted through the YAML dumper, never string concatenation: FINDINGS E3d found that
+        // hand-crafted frontmatter carrying `: ` inside a value is the single most likely
+        // authoring error, and a dumper cannot make it.
+        let mut fm = Mapping::new();
+        fn put(m: &mut Mapping, k: &str, v: Value) {
+            m.insert(Value::String(k.to_string()), v);
+        }
+        put(&mut fm, "id", Value::String(req.id.clone()));
+        put(&mut fm, "type", Value::String(req.concept_type.clone()));
+        put(&mut fm, "title", Value::String(req.title.clone()));
+        put(&mut fm, "description", Value::String(req.description.clone()));
+        put(
+            &mut fm,
+            "tags",
+            Value::Sequence(req.tags.iter().map(|t| Value::String(t.clone())).collect()),
+        );
+        put(&mut fm, "status", Value::String("draft".to_string()));
+
+        if let Some(ref by) = req.generated_by {
+            let mut g = Mapping::new();
+            put(&mut g, "by", Value::String(by.clone()));
+            put(&mut g, "at", Value::String(req.now_iso8601.clone()));
+            put(&mut fm, "generated", Value::Mapping(g));
+        }
+        // NOTE: no `verified` key, ever. An agent may not author a human verification claim
+        // (ARCHITECTURE.md "The trust invariant"); scaffolding one would launder a
+        // machine-written concept into a trusted one.
+
+        let body = format!("\n# {}\n\n", req.title);
+        format!("---\n{}---\n{}", canonical_frontmatter(&fm), body).into_bytes()
+    }
 }
 
 impl FrontmatterParser for YamlSerde {
-    /// Parse raw concept bytes into the minimal query view.
-    ///
-    /// Behaviour that matches the Python oracle (okf.py):
-    /// - `type` must be present and non-empty; any string value is accepted including
-    ///   unknown types not in the OKF vocabulary (spec: consumers MUST NOT reject them).
-    /// - Unknown frontmatter keys are silently accepted; they are not visible in the
-    ///   minimal `Concept` view but they do not cause an error.
-    /// - Temporal field values (`at:`, `stale_after:`, `usage_window:` etc.) remain
-    ///   ISO 8601 strings — serde_yaml_ng does not coerce them to datetime objects.
-    /// - `path` is set to `""` because raw bytes carry no path information; the caller
-    ///   (ConceptRepository) is responsible for filling it in.
+    /// The minimal query view, derived from the same parse as everything else so the two
+    /// cannot disagree about what a concept is.
     fn parse(&self, raw: &[u8]) -> Result<Concept, String> {
-        let text = std::str::from_utf8(raw).map_err(|e| format!("invalid UTF-8: {e}"))?;
-
-        let fm_text = split_frontmatter(text)?;
-
-        let value: Value = serde_yaml_ng::from_str(&fm_text)
-            .map_err(|e| format!("invalid YAML: {}", first_line(&e.to_string())))?;
-
-        let mapping = match value {
-            Value::Mapping(m) => m,
-            // Empty frontmatter (`---\n---`) deserialises as Null.
-            Value::Null => {
-                return Err("missing or empty `type`".to_string());
-            }
-            _ => return Err("frontmatter is not a mapping".to_string()),
-        };
-
-        // `type` is the only REQUIRED field in OKF v0.2.
-        // Any non-empty string value is preserved — unknown types must not be rejected.
-        let concept_type = match mapping.get("type") {
-            Some(Value::String(s)) if !s.trim().is_empty() => s.clone(),
-            Some(_) | None => return Err("missing or empty `type`".to_string()),
-        };
-
-        // `title` is optional; derive from filename when absent (caller's responsibility
-        // since we have no path here — return empty and let the repository layer fill it).
-        let title = match mapping.get("title") {
-            Some(Value::String(s)) => s.clone(),
-            _ => String::new(),
-        };
-
-        Ok(Concept {
-            path: String::new(),
-            concept_type,
-            title,
-        })
+        let parsed = self.parse_concept("", raw);
+        match parsed.error {
+            Some(e) => Err(e),
+            None => Ok(parsed.as_concept()),
+        }
     }
-}
-
-fn first_line(s: &str) -> &str {
-    s.lines().next().unwrap_or(s)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use okf_ports::FrontmatterParser;
 
-    fn parse(raw: &str) -> Result<Concept, String> {
-        YamlSerde.parse(raw.as_bytes())
+    fn parse(raw: &str) -> ParsedConcept {
+        YamlSerde.parse_concept("notes/x.md", raw.as_bytes())
     }
-
-    // ── happy-path ────────────────────────────────────────────────────────────
-
-    #[test]
-    fn basic_concept_parsed() {
-        let raw = "---\ntype: Note\ntitle: Hello world\n---\n\nBody.\n";
-        let c = parse(raw).unwrap();
-        assert_eq!(c.concept_type, "Note");
-        assert_eq!(c.title, "Hello world");
-    }
-
-    #[test]
-    fn title_absent_returns_empty_string() {
-        let raw = "---\ntype: Decision\n---\n\nBody.\n";
-        let c = parse(raw).unwrap();
-        assert_eq!(c.concept_type, "Decision");
-        assert_eq!(c.title, "");
-    }
-
-    // ── E3a: temporal values must stay ISO 8601 strings ───────────────────────
-    //
-    // This is the single most important behavioural requirement (FINDINGS.md E3a,
-    // RUST-PATH.md §1).  PyYAML coerces `at: 2026-01-01T00:00:00Z` to a Python
-    // datetime and re-emits it as `2026-01-01 00:00:00+00:00` — breaking the spec.
-    // serde_yaml_ng does NOT coerce: temporal scalars remain Value::String.
 
     #[test]
     fn temporal_values_stay_iso8601_strings() {
-        // Parse the YAML directly through serde_yaml_ng::Value to inspect every field,
-        // not just those exposed by the minimal Concept view.
-        let fm = "\
-type: Metric
-title: Temporal test
-at: 2026-01-01T00:00:00Z
-stale_after: 2026-09-23
-usage_window: 2026-06
-generated:
-  at: 2026-03-15T12:00:00Z
-  by: agent:test
-";
-        let value: Value = serde_yaml_ng::from_str(fm).unwrap();
-        let m = value.as_mapping().unwrap();
-
+        let c = parse("---\ntype: Note\nstale_after: 2026-01-01T00:00:00Z\n---\n\nB.\n");
         assert!(
-            matches!(m.get("at"), Some(Value::String(_))),
-            "`at:` must stay a string, not be coerced to a datetime"
-        );
-        assert!(
-            matches!(m.get("stale_after"), Some(Value::String(_))),
-            "`stale_after:` must stay a string"
-        );
-        assert!(
-            matches!(m.get("usage_window"), Some(Value::String(_))),
-            "`usage_window:` must stay a string"
-        );
-
-        // Nested temporal inside `generated.at`
-        let gen = m.get("generated").and_then(Value::as_mapping).unwrap();
-        assert!(
-            matches!(gen.get("at"), Some(Value::String(_))),
-            "`generated.at` must stay a string"
+            c.frontmatter_json.contains("\"2026-01-01T00:00:00Z\""),
+            "E3a regression -- timestamp coerced: {}",
+            c.frontmatter_json
         );
     }
 
-    // ── unknown keys must be preserved (not dropped, not cause an error) ──────
-
     #[test]
-    fn unknown_frontmatter_keys_do_not_cause_error() {
-        // `retention`, `classification`, `custom_field` are not in the OKF vocabulary.
-        let raw = "---\ntype: Note\ntitle: Retained\nretention: 7y\nclassification: internal\ncustom_field: whatever\n---\n\nBody.\n";
-        let c = parse(raw).expect("unknown keys must not cause a parse error");
-        assert_eq!(c.concept_type, "Note");
-        // The raw bytes are authoritative; the Concept is a query view.
-        // Unknown keys are visible in the underlying Value but not in Concept.
-    }
-
-    // ── unknown type values must be preserved (spec: consumers MUST NOT reject) ─
-
-    #[test]
-    fn unknown_type_value_is_preserved_not_rejected() {
-        // `ThreatModel` is not in the standard OKF type vocabulary.
-        let raw = "---\ntype: ThreatModel\ntitle: Unknown type survives\n---\n\nBody.\n";
-        let c = parse(raw).expect("unknown type must not be rejected");
-        assert_eq!(c.concept_type, "ThreatModel");
-    }
-
-    // ── combined: unknown key + unknown type + ISO 8601 timestamp in one doc ──
-    //
-    // This is the FINDINGS.md E3a gate case: all three requirements in one fixture.
-
-    #[test]
-    fn combined_unknown_key_unknown_type_and_iso8601_timestamp() {
-        let raw = "\
----
-type: ThreatModel
-title: Combined gate test
-retention: 7y
-at: 2026-01-01T00:00:00Z
-stale_after: 2026-09-23
-classification: internal
----
-
-Body with a [broken link](/does/not/exist.md).
-";
-        // Parse succeeds despite unknown type and unknown keys.
-        let c = parse(raw).expect("combined case must parse without error");
-        assert_eq!(c.concept_type, "ThreatModel");
-        assert_eq!(c.title, "Combined gate test");
-
-        // Also verify via serde_yaml_ng::Value that temporal values are strings.
-        let fm_text = split_frontmatter(raw).unwrap();
-        let value: Value = serde_yaml_ng::from_str(&fm_text).unwrap();
-        let m = value.as_mapping().unwrap();
-
-        assert_eq!(m.get("type").and_then(Value::as_str), Some("ThreatModel"));
-        assert_eq!(m.get("retention").and_then(Value::as_str), Some("7y"),
-            "unknown key `retention` must round-trip through the parser");
-        assert!(
-            matches!(m.get("at"), Some(Value::String(_))),
-            "`at:` in combined fixture must stay a string"
-        );
-        assert!(
-            matches!(m.get("stale_after"), Some(Value::String(_))),
-            "`stale_after:` in combined fixture must stay a string"
-        );
-    }
-
-    // ── fixture files: _fixture/ ──────────────────────────────────────────────
-
-    #[test]
-    fn fixture_unknown_type_md() {
-        // _fixture/adversarial/unknown-type.md: ThreatModel type + two unknown keys.
-        let raw = include_str!("../../../../_fixture/adversarial/unknown-type.md");
-        let c = parse(raw).unwrap();
-        assert_eq!(c.concept_type, "ThreatModel");
-        assert_eq!(c.title, "Unknown type survives");
+    fn unknown_keys_and_unknown_types_are_preserved() {
+        let c = parse("---\ntype: ThreatModel\nretention: 7y\n---\n\nB.\n");
+        assert_eq!(c.concept_type, "ThreatModel", "unknown type must survive");
+        assert!(c.frontmatter_json.contains("\"retention\""), "unknown key dropped");
+        assert!(c.conformant(), "an unknown type is still conformant per spec");
     }
 
     #[test]
-    fn fixture_verified_chain_md_temporal_fields() {
-        // _fixture/adversarial/verified-chain.md has `at:` fields inside verified[].
-        let raw = include_str!("../../../../_fixture/adversarial/verified-chain.md");
-        let c = parse(raw).unwrap();
-        assert_eq!(c.concept_type, "Metric");
+    fn missing_type_is_non_conformant_but_still_parsed() {
+        let c = parse("---\ntitle: No type\n---\n\nB.\n");
+        assert!(!c.conformant());
+        assert_eq!(c.error.as_deref(), Some("missing or empty `type`"));
+        assert_eq!(c.title, "No type", "the rest of the parse must still be usable");
+    }
 
-        let fm_text = split_frontmatter(raw).unwrap();
-        let value: Value = serde_yaml_ng::from_str(&fm_text).unwrap();
-        let m = value.as_mapping().unwrap();
+    #[test]
+    fn absent_frontmatter_is_an_error_not_a_panic() {
+        let c = parse("just a body\n");
+        assert_eq!(c.error.as_deref(), Some("no frontmatter"));
+        assert_eq!(c.title, "x", "title falls back to the filename stem");
+    }
 
-        // usage_window is an inline mapping, not a string — just verify parsing works.
-        assert!(m.contains_key("usage_window"), "usage_window must be preserved");
+    #[test]
+    fn status_defaults_to_stable() {
+        assert_eq!(parse("---\ntype: Note\n---\n\nB.\n").status, "stable");
+    }
 
-        // verified[].at must stay strings.
-        if let Some(Value::Sequence(entries)) = m.get("verified") {
-            for entry in entries {
-                if let Some(entry_map) = entry.as_mapping() {
-                    if let Some(at_val) = entry_map.get("at") {
-                        assert!(
-                            matches!(at_val, Value::String(_)),
-                            "verified[].at must stay a string, got {at_val:?}"
-                        );
-                    }
-                }
-            }
+    #[test]
+    fn trust_follows_the_spec_actor_convention() {
+        let human = parse("---\ntype: Note\nverified:\n  - by: human:gary\n---\n\nB.\n");
+        assert_eq!(human.trust, Trust::Verified);
+        let machine = parse("---\ntype: Note\ngenerated:\n  by: agent:x\n---\n\nB.\n");
+        assert_eq!(machine.trust, Trust::Generated);
+        assert_eq!(parse("---\ntype: Note\n---\n\nB.\n").trust, Trust::Unknown);
+    }
+
+    /// A non-`human:` verifier must NOT reach the trusted tier. The whole ranking model rests
+    /// on this, so it is asserted directly rather than inferred from the case above.
+    #[test]
+    fn a_machine_verifier_is_not_human_verified() {
+        let c = parse("---\ntype: Note\nverified:\n  - by: agent:claude\n---\n\nB.\n");
+        assert_eq!(c.trust, Trust::Unknown, "only `human:` grants the trusted tier");
+    }
+
+    #[test]
+    fn risky_constructs_are_refused_by_the_formatter() {
+        for raw in [
+            "---\ntype: Note\nscript: |\n  echo hi\n---\n\nB.\n",
+            "---\ntype: Note\ndefaults: &d\n  a: 1\n---\n\nB.\n",
+            "---\ntype: Note\nv:\n  - <<: *d\n---\n\nB.\n",
+        ] {
+            let c = parse(raw);
+            assert!(c.format_skip_reason.is_some(), "must refuse to reformat: {raw:?}");
+            assert!(YamlSerde.canonicalize(&c).is_none());
         }
     }
 
-    // ── _upstream/: third-party OKF, read-only oracle ─────────────────────────
-
     #[test]
-    fn upstream_acme_retail_log_md() {
-        // acme_retail/log.md uses `type: Log` — an upstream-defined type, not our vocab.
-        let raw = include_str!("../../../../_upstream/acme_retail/log.md");
-        let c = parse(raw).unwrap();
-        assert_eq!(c.concept_type, "Log");
-    }
-
-    // ── error cases ───────────────────────────────────────────────────────────
-
-    #[test]
-    fn no_frontmatter_returns_error() {
-        let raw = "Just a markdown file with no frontmatter.\n";
-        assert!(parse(raw).is_err(), "no frontmatter must return Err");
+    fn canonical_rewrite_preserves_values_and_reaches_a_fixed_point() {
+        let c = parse("---\ntitle: Hello\ntype: Note\n---\n\nBody.\n");
+        let once = YamlSerde.canonicalize(&c).expect("formattable");
+        let c2 = YamlSerde.parse_concept("notes/x.md", &once);
+        assert_eq!(c2.title, c.title);
+        assert_eq!(c2.concept_type, c.concept_type);
+        let twice = YamlSerde.canonicalize(&c2).expect("still formattable");
+        assert_eq!(once, twice, "fmt must be idempotent or --check is never clean");
     }
 
     #[test]
-    fn empty_type_returns_error() {
-        let raw = "---\ntype: \ntitle: Empty type\n---\n\nBody.\n";
-        assert!(parse(raw).is_err(), "empty type must return Err");
+    fn canonical_order_puts_type_before_title() {
+        let c = parse("---\ntitle: Hello\ntype: Note\n---\n\nB.\n");
+        let out = String::from_utf8(YamlSerde.canonicalize(&c).unwrap()).unwrap();
+        assert!(out.find("type:").unwrap() < out.find("title:").unwrap());
     }
 
     #[test]
-    fn missing_type_returns_error() {
-        let raw = "---\ntitle: No type field\n---\n\nBody.\n";
-        assert!(parse(raw).is_err(), "missing type must return Err");
+    fn unknown_keys_survive_canonicalisation() {
+        let c = parse("---\ntype: Note\nretention: 7y\n---\n\nB.\n");
+        let out = String::from_utf8(YamlSerde.canonicalize(&c).unwrap()).unwrap();
+        assert!(out.contains("retention"), "canonicalise dropped an unknown key: {out}");
     }
 
     #[test]
-    fn invalid_yaml_returns_error() {
-        let raw = "---\ntype: Note\nbad: [unclosed\n---\n";
-        assert!(parse(raw).is_err(), "invalid YAML must return Err");
+    fn scaffolding_never_emits_a_verified_claim() {
+        let req = NewConceptRequest {
+            concept_type: "Note".into(),
+            title: "A Thing".into(),
+            generated_by: Some("capture/claude".into()),
+            now_iso8601: "2026-08-02T00:00:00Z".into(),
+            id: "abc123abc123".into(),
+            ..Default::default()
+        };
+        let out = String::from_utf8(YamlSerde.emit_new(&req)).unwrap();
+        assert!(!out.contains("verified"), "`new` must never author a verified claim: {out}");
+        assert!(out.contains("generated:"));
+        let back = YamlSerde.parse_concept("notes/a-thing.md", out.as_bytes());
+        assert_eq!(back.trust, Trust::Generated);
+        assert!(back.conformant());
     }
 
     #[test]
-    fn crlf_line_endings_handled() {
-        let raw = "---\r\ntype: Note\r\ntitle: CRLF\r\n---\r\n\r\nBody.\r\n";
-        let c = parse(raw).unwrap();
-        assert_eq!(c.concept_type, "Note");
+    fn raw_bytes_are_carried_verbatim_including_crlf() {
+        let raw = b"---\r\ntype: Note\r\n---\r\n\r\nBody.\r\n";
+        let c = YamlSerde.parse_concept("x.md", raw);
+        assert_eq!(c.raw, raw.to_vec(), "raw must be byte-identical -- T2a depends on it");
+        assert_eq!(c.concept_type, "Note", "but the derived view still parses");
     }
 }

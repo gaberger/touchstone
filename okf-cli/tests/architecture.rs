@@ -90,19 +90,44 @@ fn rule_3_usecases_never_name_an_adapter() {
 }
 
 #[test]
-fn rule_4_adapters_import_ports_only() {
+fn rule_4a_secondary_adapters_import_ports_only() {
+    // Driven adapters IMPLEMENT ports. They are called by the use-case layer and must never
+    // call back into it, so `okf-ports` is the whole of their internal surface.
+    //
     // Note this is only satisfiable because okf-ports RE-EXPORTS the domain value types. Without
-    // that, every adapter would need its own okf-domain dependency and rule 4 would be aspirational.
+    // that, every adapter would need its own okf-domain dependency and the rule would be aspirational.
     //
     // Only *internal* (okf-*) deps are checked here: adapters may freely depend on external
     // crates (serde_yaml_ng, rusqlite, gix, …). The layering rule governs which workspace
     // crates an adapter may reach — external crates are invisible to the layer model.
-    for (rel, name) in SECONDARY.iter().map(|a| (format!("okf-adapters/secondary/{a}"), format!("okf-{a}")))
-        .chain(PRIMARY.iter().map(|a| (format!("okf-adapters/primary/{a}"), format!("okf-{a}-adapter"))))
-    {
+    for a in SECONDARY {
+        let rel = format!("okf-adapters/secondary/{a}");
         let deps = internal_deps_of(&rel);
         assert_eq!(deps, BTreeSet::from(["okf-ports".to_string()]),
-            "{name} must depend on okf-ports only (internal deps), found {deps:?}");
+            "okf-{a} must depend on okf-ports only (internal deps), found {deps:?}");
+    }
+}
+
+#[test]
+fn rule_4b_primary_adapters_drive_the_use_cases() {
+    // Driving adapters CALL use cases. This is the half of rule 4 that was missing, and its
+    // absence was not cosmetic: forbidding `okf-usecases` here is precisely why the CLI adapter
+    // reimplemented the entire use-case layer, leaving 1,074 tested lines unreachable. The gate
+    // did not merely fail to catch that duplication -- it required it.
+    //
+    // A primary adapter may name okf-usecases and okf-ports, and nothing else internal. It must
+    // NOT reach past the use cases into okf-domain directly: the domain types it needs are
+    // re-exported through okf-ports, and letting an adapter bind to the domain would put a second
+    // door into the hexagon.
+    let allowed = BTreeSet::from(["okf-usecases".to_string(), "okf-ports".to_string()]);
+    for a in PRIMARY {
+        let rel = format!("okf-adapters/primary/{a}");
+        let deps = internal_deps_of(&rel);
+        assert!(deps.is_subset(&allowed),
+            "okf-{a}-adapter may depend only on okf-usecases + okf-ports, found {deps:?}");
+        assert!(deps.contains("okf-usecases"),
+            "okf-{a}-adapter must DRIVE the use cases, not reimplement them -- \
+             a primary adapter that does not depend on okf-usecases is a second implementation");
     }
 }
 
@@ -135,6 +160,51 @@ fn rule_6_cli_is_the_only_crate_that_imports_adapters() {
     let cli = deps_of("okf-cli");
     for a in &adapters {
         assert!(cli.contains(a), "okf-cli does not wire adapter {a}");
+    }
+}
+
+/// Adapters that are deliberately not on the execution path yet, each gated on a named
+/// untested assumption. Being listed here is a claim that the crate is a stub by decision,
+/// not by neglect -- so the list is short, and every entry cites its gate.
+const DEFERRED: [(&str, &str); 3] = [
+    ("okf-crdt-sync", "A7 -- CRDT sync is unproven; git remains the write path (ADR-2608010930)"),
+    ("okf-embed-local", "A4 -- hybrid retrieval is unmeasured; BM25 alone until it is"),
+    ("okf-mcp-adapter", "surface under construction"),
+];
+
+#[test]
+fn rule_6b_wiring_means_used_not_merely_declared() {
+    // Guards the guard, again. Rule 6 above checks that okf-cli *declares* each adapter, and
+    // that is trivially satisfiable by a function which constructs each one and throws it away:
+    //
+    //     fn _touch_adapters() {                       // <- what used to live in main.rs
+    //         let _ = okf_fs_bundle::FsBundle::new(".");
+    //         let _: Option<okf_sqlite_index::SqliteIndex> = None;   // not even constructed
+    //     }
+    //
+    // With that present the gate reported a fully wired hexagon while the binary actually ran on
+    // a `FullStore` hand-rolled over raw rusqlite inside main.rs, and the entire adapter and
+    // use-case layer -- some 2,500 tested lines -- was unreachable. The rule was true and useless.
+    //
+    // So: a non-deferred adapter must be named somewhere in the composition root OUTSIDE any
+    // such touch function, and no touch function may exist at all.
+    let main_rs = fs::read_to_string(workspace_root().join("okf-cli/src/main.rs")).expect("main.rs");
+    assert!(
+        !main_rs.contains("_touch_adapters"),
+        "okf-cli/src/main.rs still defines a touch function -- adapters must be wired, not touched"
+    );
+
+    let deferred: BTreeSet<&str> = DEFERRED.iter().map(|(n, _)| *n).collect();
+    for a in adapter_crate_names() {
+        if deferred.contains(a.as_str()) {
+            continue;
+        }
+        let ident = a.replace('-', "_");
+        assert!(
+            main_rs.contains(&ident),
+            "{a} is declared but never referenced in the composition root -- \
+             either wire it or add it to DEFERRED with the assumption it is gated on"
+        );
     }
 }
 

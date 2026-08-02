@@ -382,6 +382,7 @@ name = "okf-yaml-serde"
 version = "0.1.0"
 dependencies = [
  "okf-ports",
+ "serde_json",
  "serde_yaml_ng",
 ]
 

@@ -502,6 +502,9 @@ mod tests {
                 verified_entries: vec![],
                 has_source_missing_resource: false,
                 has_wikilinks,
+                // The fake carries no frontmatter view: these tests exercise use-case
+                // coordination, and the real JSON projection is the parser adapter's job.
+                frontmatter_json: String::new(),
             }
         }
 

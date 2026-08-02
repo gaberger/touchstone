@@ -2,6 +2,14 @@
 //! `[dependencies]` is what makes ARCHITECTURE.md rule 1 a compile error rather than a
 //! convention. Survives a stack rewrite untouched.
 
+pub mod render;
+pub mod text;
+
+pub use render::render_index;
+pub use text::{
+    extract_links, fnv64, normalize_path, relative_path, resolve_link, slugify, split_frontmatter,
+};
+
 /// A concept as the bundle holds it. Raw bytes stay authoritative (README design rules);
 /// this is the parsed view used for querying.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +57,11 @@ pub struct ParsedConcept {
     pub has_source_missing_resource: bool,
     /// True when `[[wikilink]]` syntax appears anywhere in the raw text.
     pub has_wikilinks: bool,
+    /// Frontmatter as a JSON object string, verbatim -- unknown keys included, temporal values
+    /// as the strings they were authored as. Carried as JSON rather than a typed map so the
+    /// domain stays free of any YAML library, and so `show --json` and the conformance drills
+    /// observe exactly what the parser saw. Empty string when there is no frontmatter.
+    pub frontmatter_json: String,
 }
 
 impl ParsedConcept {

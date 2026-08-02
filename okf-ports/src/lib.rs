@@ -5,6 +5,16 @@
 //! dependency to name a `Concept`, and rule 4 would be false in practice.
 pub use okf_domain::{Concept, ParsedConcept, Trust, VerifiedEntry};
 
+/// Pure domain operations, re-exported for the same reason as the value types: rule 4a says a
+/// secondary adapter imports `okf-ports` and nothing else, so without this an adapter wanting
+/// to split a frontmatter block would either need its own `okf-domain` dependency (making the
+/// rule false in practice) or would write a fourth copy of the function — which is exactly what
+/// had already happened three times over.
+pub use okf_domain::{
+    extract_links, fnv64, normalize_path, relative_path, render_index, resolve_link, slugify,
+    split_frontmatter,
+};
+
 // ── Minimal existing ports (unchanged) ───────────────────────────────────────
 
 pub trait FrontmatterParser { fn parse(&self, raw: &[u8]) -> Result<Concept, String>; }
