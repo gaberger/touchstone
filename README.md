@@ -116,6 +116,12 @@ STALE: decisions/margin-restatement-is-incomplete.md
 The signature covers the content digest, not the path. Editing a signed concept invalidates its
 attestation instead of carrying it along.
 
+---
+
+**→ [How to run this as a business brain](docs/USING.md)** — what to ingest and what to
+ignore, when an email becomes a concept, which types to be strict about, what to sign, and the
+anti-patterns that turn a knowledge base back into a folder of files.
+
 ## For agents
 
 ```bash
