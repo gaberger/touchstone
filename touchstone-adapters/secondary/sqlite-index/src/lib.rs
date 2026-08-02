@@ -67,6 +67,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
 
 pub struct SqliteIndex {
     conn: Connection,
+    /// Writes since the last commit, so the batch can be closed before the WAL grows unbounded.
+    pending: usize,
+    /// True while an explicit write transaction is open.
+    ///
+    /// Without one, every statement is its own implicit transaction and therefore its own
+    /// commit. Indexing issues roughly five statements per concept, so a 50k bundle asked the
+    /// kernel to durably commit a quarter of a million times: measured at 1,028 s wall, of
+    /// which 606 s was system time (FINDINGS E9). The work was never the problem.
+    in_txn: bool,
 }
 
 impl SqliteIndex {
@@ -78,16 +87,33 @@ impl SqliteIndex {
                 .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
         }
         let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+        tune(&conn)?;
         conn.execute_batch(SCHEMA).map_err(|e| e.to_string())?;
-        Ok(Self { conn })
+        Ok(Self { conn, in_txn: false, pending: 0 })
     }
 
     /// In-memory index, for tests and for callers that want a throwaway.
     pub fn in_memory() -> Result<Self, String> {
         let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
+        tune(&conn)?;
         conn.execute_batch(SCHEMA).map_err(|e| e.to_string())?;
-        Ok(Self { conn })
+        Ok(Self { conn, in_txn: false, pending: 0 })
     }
+}
+
+/// Durability settings for a DERIVED store.
+///
+/// `synchronous = FULL` is SQLite's default because it assumes the data is irreplaceable.
+/// Here it is not: the index is rebuildable from the files by construction, which is the whole
+/// point of A1. Trading fsync-per-commit for "lose at most the last transaction after a power
+/// cut, then re-run `touchstone index`" is the correct trade for this store and the wrong one
+/// for the bundle -- which is why the bundle is plain files and never goes through here.
+///
+/// WAL additionally lets readers proceed during a bulk index instead of blocking on it.
+fn tune(conn: &Connection) -> Result<(), String> {
+    conn.pragma_update(None, "journal_mode", "WAL").map_err(|e| e.to_string())?;
+    conn.pragma_update(None, "synchronous", "NORMAL").map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn agg(conn: &Connection, sql: &str) -> Vec<(String, usize)> {
@@ -164,6 +190,54 @@ fn fts_query(raw: &str) -> String {
     if terms.is_empty() { String::new() } else { terms.join(" OR ") }
 }
 
+impl SqliteIndex {
+    /// Open a write transaction on first write, and leave it open until `commit`.
+    ///
+    /// Deferred rather than begun at construction so read-only commands (`search`, `stats`,
+    /// `show`) never take a write lock.
+    fn begin_if_needed(&mut self) -> Result<(), String> {
+        if !self.in_txn {
+            self.conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+            self.in_txn = true;
+        }
+        Ok(())
+    }
+
+    /// Close the batch every `BATCH` writes.
+    ///
+    /// One transaction around an entire 50k index looked like the obvious fix and was worse
+    /// than the problem: nothing checkpoints until the end, so `index.db` stayed at 0 bytes
+    /// while `index.db-wal` grew past 216 MB, and every upsert's conflict lookup had to search
+    /// an ever-larger WAL. That is superlinear -- 5k finished in 7.5 s, 50k had not finished in
+    /// 600 s.
+    ///
+    /// Committing periodically keeps nearly all of the fsync saving (one commit per BATCH
+    /// concepts instead of five per concept) while bounding the WAL. The index is derived, so a
+    /// crash mid-run costs a re-run, never data.
+    fn checkpoint_if_due(&mut self) -> Result<(), String> {
+        const BATCH: usize = 1_000;
+        self.pending += 1;
+        if self.pending >= BATCH && self.in_txn {
+            self.conn.execute_batch("COMMIT").map_err(|e| e.to_string())?;
+            self.in_txn = false;
+            self.pending = 0;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for SqliteIndex {
+    /// Commit anything still open. A caller that forgets `commit()` would otherwise roll back
+    /// an entire index run at exit -- silently, since the files are untouched and only the
+    /// derived plane would be empty.
+    fn drop(&mut self) {
+        if self.in_txn {
+            let _ = self.conn.execute_batch("COMMIT");
+            self.in_txn = false;
+        }
+    }
+}
+
 impl BundleIndex for SqliteIndex {
     fn prev_digests(&self) -> HashMap<String, String> {
         self.conn
@@ -176,11 +250,35 @@ impl BundleIndex for SqliteIndex {
     }
 
     fn upsert(&mut self, rec: &IndexRecord, known_paths: &HashSet<String>) -> Result<(), String> {
+        self.begin_if_needed()?;
         // Clear derived rows for this concept first. FTS5 has no upsert, and a stale tag or
         // edge left behind would survive a rebuild — quietly breaking T1.
-        for (table, col) in [("fts", "path"), ("tags", "path"), ("edges", "src")] {
+        // prepare_cached: the same five statements run once per concept, so re-parsing the SQL
+        // each time is pure overhead at bundle scale.
+        // FTS5 declares `path UNINDEXED`, which means exactly what it says: there is no index
+        // on it, so `DELETE FROM fts WHERE path=?` is a FULL SCAN of the FTS table. Once per
+        // concept, that is O(n^2) over a bundle -- measured at 0.6 ms/concept at 2k rising to
+        // 6.3 ms/concept at 20k, i.e. 10x the concepts costing 101x the time (FINDINGS E10).
+        //
+        // `rowid` IS indexed, so resolve it from the concepts table (whose `path` is a PRIMARY
+        // KEY, hence a b-tree lookup) and delete by that instead.
+        let prev_rowid: Option<i64> = self
+            .conn
+            .prepare_cached("SELECT rowid FROM concepts WHERE path=?1")
+            .and_then(|mut st| st.query_row(params![rec.path], |r| r.get(0)))
+            .ok();
+        if let Some(id) = prev_rowid {
             self.conn
-                .execute(&format!("DELETE FROM {table} WHERE {col}=?1"), params![rec.path])
+                .prepare_cached("DELETE FROM fts WHERE rowid=?1")
+                .and_then(|mut st| st.execute(params![id]))
+                .map_err(|e| e.to_string())?;
+        }
+        for sql in ["DELETE FROM tags WHERE path=?1", "DELETE FROM edges WHERE src=?1"] {
+            // tags is PRIMARY KEY(path, tag) and edges is PRIMARY KEY(src, target), so both
+            // deletes hit a leading-column index and stay logarithmic.
+            self.conn
+                .prepare_cached(sql)
+                .and_then(|mut st| st.execute(params![rec.path]))
                 .map_err(|e| e.to_string())?;
         }
 
@@ -235,28 +333,49 @@ impl BundleIndex for SqliteIndex {
                 .map_err(|e| e.to_string())?;
         }
 
+        // Key the FTS row to the concept's rowid so the delete above can find it in log time.
+        let rowid: i64 = self
+            .conn
+            .prepare_cached("SELECT rowid FROM concepts WHERE path=?1")
+            .and_then(|mut st| st.query_row(params![rec.path], |r| r.get(0)))
+            .map_err(|e| e.to_string())?;
         let tags_text = rec.tags.join(" ");
         self.conn
-            .execute(
-                "INSERT INTO fts(path,title,description,tags,body) VALUES(?1,?2,?3,?4,?5)",
-                params![rec.path, rec.title, rec.description, tags_text, rec.body],
-            )
+            .prepare_cached("INSERT INTO fts(rowid,path,title,description,tags,body) VALUES(?1,?2,?3,?4,?5,?6)")
+            .and_then(|mut st| st.execute(params![rowid, rec.path, rec.title, rec.description, tags_text, rec.body]))
             .map_err(|e| e.to_string())?;
 
-        Ok(())
+        self.checkpoint_if_due()
     }
 
     fn remove(&mut self, path: &str) -> Result<(), String> {
-        for table in ["fts", "tags", "edges", "concepts"] {
-            let col = if table == "edges" { "src" } else { "path" };
+        self.begin_if_needed()?;
+        // FTS first, by rowid, while the concepts row still exists to resolve it.
+        if let Ok(id) = self
+            .conn
+            .prepare_cached("SELECT rowid FROM concepts WHERE path=?1")
+            .and_then(|mut st| st.query_row(params![path], |r| r.get::<_, i64>(0)))
+        {
             self.conn
-                .execute(&format!("DELETE FROM {table} WHERE {col}=?1"), params![path])
+                .prepare_cached("DELETE FROM fts WHERE rowid=?1")
+                .and_then(|mut st| st.execute(params![id]))
+                .map_err(|e| e.to_string())?;
+        }
+        for sql in [
+            "DELETE FROM tags WHERE path=?1",
+            "DELETE FROM edges WHERE src=?1",
+            "DELETE FROM concepts WHERE path=?1",
+        ] {
+            self.conn
+                .prepare_cached(sql)
+                .and_then(|mut st| st.execute(params![path]))
                 .map_err(|e| e.to_string())?;
         }
         Ok(())
     }
 
     fn reresolve(&mut self) -> Result<(), String> {
+        self.begin_if_needed()?;
         // Runs once after the whole walk, not per-upsert: a concept indexed late can resolve a
         // link written earlier, and per-upsert resolution would depend on walk order.
         self.conn
@@ -268,8 +387,13 @@ impl BundleIndex for SqliteIndex {
     }
 
     fn commit(&mut self) -> Result<(), String> {
+        if self.in_txn {
+            self.conn.execute_batch("COMMIT").map_err(|e| e.to_string())?;
+            self.in_txn = false;
+        }
+        self.pending = 0;
         self.conn
-            .execute_batch("PRAGMA wal_checkpoint(PASSIVE)")
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
             .map_err(|e| e.to_string())
     }
 
@@ -688,5 +812,70 @@ mod fts_query_tests {
         )
         .unwrap();
         assert_eq!(hits[0].path, "n/a.md", "the denser match must rank first, not merely appear");
+    }
+}
+
+#[cfg(test)]
+mod scaling_tests {
+    use super::tests::rec;
+    use super::*;
+
+    /// Re-indexing must not scan the FTS table.
+    ///
+    /// `fts` declares `path UNINDEXED`, so `DELETE FROM fts WHERE path=?` was a full scan run
+    /// once per concept -- O(n^2) over a bundle, measured at 1,028 s for 50k. Deleting by
+    /// `rowid` made it 11.85 s.
+    ///
+    /// A timing assertion would be flaky on shared CI, so this asserts the *shape* instead:
+    /// re-indexing every concept must leave exactly one FTS row per concept. A stale row means
+    /// the delete missed, which is the symptom that forced the full scan in the first place.
+    #[test]
+    fn reindexing_replaces_fts_rows_rather_than_accumulating_them() {
+        let mut i = SqliteIndex::in_memory().unwrap();
+        let concepts: Vec<IndexRecord> =
+            (0..50).map(|n| rec(&format!("n/{n}.md"), &format!("T{n}"), "body text")).collect();
+
+        for pass in 0..3 {
+            for c in &concepts {
+                i.upsert(c, &HashSet::new()).unwrap();
+            }
+            i.commit().unwrap();
+            let fts: i64 = i
+                .conn
+                .query_row("SELECT COUNT(*) FROM fts", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(
+                fts, 50,
+                "pass {pass}: {fts} FTS rows for 50 concepts -- re-index is accumulating, not replacing"
+            );
+        }
+    }
+
+    /// The FTS row and its concept must share a rowid, or the delete cannot find it.
+    #[test]
+    fn fts_rows_are_keyed_to_their_concept_rowid() {
+        let mut i = SqliteIndex::in_memory().unwrap();
+        i.upsert(&rec("n/a.md", "A", "body"), &HashSet::new()).unwrap();
+        i.commit().unwrap();
+        let mismatched: i64 = i
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM fts f JOIN concepts c ON c.path = f.path WHERE f.rowid != c.rowid",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(mismatched, 0, "FTS rowid drifted from its concept -- deletes will miss");
+    }
+
+    /// Removing a concept must take its FTS row with it.
+    #[test]
+    fn remove_takes_the_fts_row_too() {
+        let mut i = SqliteIndex::in_memory().unwrap();
+        i.upsert(&rec("n/a.md", "A", "unique term"), &HashSet::new()).unwrap();
+        i.remove("n/a.md").unwrap();
+        i.commit().unwrap();
+        let fts: i64 = i.conn.query_row("SELECT COUNT(*) FROM fts", [], |r| r.get(0)).unwrap();
+        assert_eq!(fts, 0, "orphaned FTS row survives its concept");
     }
 }
