@@ -1,0 +1,22 @@
+# Written from the questions BEFORE running either arm. "answered" = an answer document
+# appears in the arm's top 5. Mechanical, and stated as a proxy for human judgement.
+1	postfilter|ADR-2608010920
+2	INDEX|ADR-
+3	parser-as-port|ADR-2608010940
+4	architecture|ADR-2608010930
+5	architecture|findings
+6	git-as-attestation|ADR-2608010930
+7	architecture|decisions
+8	architecture|readme|ADR-2608010900
+9	architecture|readme
+10	prototype
+11	sqlite-index|architecture
+12	findings|rust-path
+13	architecture|readme|ADR-2608010910
+14	prototype
+15	findings
+16	ADR-2608021132|parity
+17	findings|fs-bundle
+18	prototype|ADR-2608010950
+19	findings|readme
+20	readme|architecture
