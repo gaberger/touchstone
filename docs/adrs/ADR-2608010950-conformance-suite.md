@@ -89,7 +89,7 @@ bundle plus expected outputs — and require every implementation to pass it.
 | P4 | Declared-divergence table per parser adapter (merge keys, comments, anchors) | Pending | code:touchstone-conformance/tests/parser_contract.rs, test:cargo test -p touchstone-conformance parser_contract |
 | P5 | Run every drill against the upstream sample bundles, not just T2 | Completed | code:touchstone-conformance/src/lib.rs all_bundles(), test:cargo test -p touchstone-conformance |
 | P6 | T6 via the upstream `reference_agent` CLI | Pending — unblocked | test:TOUCHSTONE_BIN=<reference_agent> cargo test -p touchstone-conformance |
-| P7 | CI gate on every push | Pending | code:.github/workflows/conformance.yml, test:bash tests/verify.sh |
+| P7 | CI gate on every push | Completed | code:.github/workflows/gate.yml, test:bash tests/verify.sh |
 
 **Deviations from the decision as written, and why.**
 

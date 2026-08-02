@@ -1,0 +1,56 @@
+# The standing gate, run on every push.
+#
+# ADR-2608010950 P7 asked for this and it was the last thing keeping the suite dependent on
+# someone remembering to run it. A conformance suite nobody runs is documentation.
+name: gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The conformance suite drives the BINARY as a black box, so it has to exist first.
+      # A missing binary is a hard error there, never a skip -- a gate that quietly skips
+      # reports green while asserting nothing.
+      - name: Build
+        run: cargo build --release --bin touchstone
+
+      - name: Unit and integration tests
+        run: cargo test --workspace
+
+      - name: Conformance
+        run: cargo test -p touchstone-conformance -- --nocapture
+
+      # `hex` is not available here, so verify.sh skips its architecture stage and says so.
+      # The layering is still enforced -- by Cargo, and by touchstone-cli/tests/architecture.rs
+      # in the step above.
+      - name: Acceptance gate
+        run: bash tests/verify.sh
+
+      # REPORTED, NOT GATED, and the distinction is deliberate.
+      #
+      # `_fixture` carries 13 concepts claiming `verified: {by: human:gary}` and none of them
+      # are signed. That is exactly the state E12 exists to catch -- and it cannot be fixed
+      # here. Signing them would require a key belonging to the human they name; anyone else
+      # doing it, including CI, including an agent, would be forging the very claim the trust
+      # invariant forbids being forged.
+      #
+      # So this prints the truth and moves on. If it ever gates, it will be because those
+      # claims were signed by the person who made them.
+      - name: Attestation report (non-gating)
+        run: |
+          echo "::group::touchstone verify _fixture"
+          ./target/release/touchstone --bundle _fixture verify || true
+          echo "::endgroup::"
+          echo "Unbacked claims above are expected: fixture claims name a human who must sign"
+          echo "them himself. See FINDINGS.md E12."

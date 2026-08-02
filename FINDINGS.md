@@ -647,14 +647,42 @@ assertion about its signers, not a PKI, and a bundle that ships a forged signers
 self-consistent. What it establishes is narrower and still worth having: a claim cannot be
 added, and its content cannot be changed, without detection by anyone who holds the bundle.
 
+## E13 — the first thing verification caught was us
+
+`touchstone verify` was built, and the first bundle it was pointed at failed:
+
+```
+0 of 13 human claims backed
+```
+
+Every `verified: {by: human:gary}` in `_fixture` is unsigned. The corpus this project uses to
+prove its own conformance is in exactly the state E12 was written to catch.
+
+**And it cannot be fixed from here.** Signing those claims requires a key belonging to the
+human they name. Anyone else doing it — CI, a maintainer, an agent — would be forging the
+precise claim the trust invariant exists to make unforgeable. The correct action is to leave
+them failing and say so.
+
+That is why the CI step is *reported, not gated*. It prints the truth on every run and does not
+block. If it ever gates, it will be because those claims were signed by the person who made
+them.
+
+Two things worth taking from this. The mechanism works — its first act was to catch its own
+authors. And an unbacked claim is not a bug to be cleared: it is a statement that nobody has
+verified this yet, which is frequently the honest state of a knowledge base and should look
+like it.
+
 ## Still open
 
 - ~~**The trust invariant has no enforcement mechanism**~~ — resolved; see E12. Claims are
   signed, verification travels with the bundle, and `verify` exits non-zero on any unbacked,
   stale or forged claim. What remains unaddressed is *who to trust*: `allowed_signers` is the
   bundle's own assertion, not a PKI.
-- **No CI gate.** `touchstone verify` and `tests/verify.sh` are not run on push; there is still
-  no `.github/workflows`.
+- ~~**No CI gate**~~ — `.github/workflows/gate.yml` runs build, tests, conformance and the
+  acceptance gate on every push (ADR-2608010950 P7). Attestation is reported, not gated: see
+  E13 for why that is the honest setting rather than a weak one.
+- **`_fixture`'s 13 `human:gary` claims are unsigned** and can only be signed by the person
+  they name (E13).
 - **Revocation** — unaddressed by any experiment, and *not* a git problem: no substrate that
   distributes the bytes can retract them, a CRDT least of all. Crypto-shredding is the only
   mechanism that changes it. The corporate boundary is justified by prefilter enforcement
