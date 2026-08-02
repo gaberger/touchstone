@@ -319,5 +319,14 @@ Not tested, and load-bearing:
 - **Scale** — the fixture is 25 concepts. Nothing here says anything about 50,000.
 - **Round-trip against the upstream sample bundles** — the fixture is adversarial but
   self-authored, which is its weakness.
-- **Revocation** — git cannot revoke. Unsolved, and the one surviving argument for a
-  corporate service boundary.
+- **The trust invariant is enforced by nothing.** `verified: {by: human:...}` is meant to be
+  backed by a signed commit, with CI rejecting unsigned deltas. Neither exists: there is no
+  CI, and nothing calls the attestation adapter. `touchstone new` cannot write `verified`, so
+  the tier survives accident but not an adversary — and `export` carries raw bytes with no
+  signature, so a consumer of a shared bundle cannot check a claim at all. **This is the
+  highest-value open item**, because provenance you cannot verify is the one thing this
+  project says it is for.
+- **Revocation** — unsolved, and *not* a git problem: no substrate that hands over the bytes
+  can take them back, a CRDT least of all. Crypto-shredding is the only mechanism that
+  changes the answer, and it is orthogonal to storage. The corporate boundary is justified by
+  prefilter enforcement (measured, E1), not by revocation.

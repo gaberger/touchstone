@@ -113,9 +113,17 @@ Derived from the spec's own actor convention — no invention:
 | neither | **unattributed** |
 
 **An agent may never write `verified: {by: human:...}`.** In a database row that is a claim;
-in git it is a signed commit. CI rejects unsigned `verified` deltas. This field is the only
-thing separating a curated brain from a pile of plausible text, and every ranking decision
-in retrieval depends on it.
+in git it is meant to be a signed commit. This field is the only thing separating a curated
+brain from a pile of plausible text, and every ranking decision in retrieval depends on it.
+
+> **Enforced by nothing today.** The intended mechanism — signed commits, and CI rejecting
+> unsigned `verified` deltas — does not exist: there is no `.github/workflows`, and
+> `VersionControl::attest` has no caller, which is why `touchstone-git-attest` is listed
+> DEFERRED. What actually holds is weaker and narrower: `touchstone new` cannot emit a
+> `verified` key, so the tier survives *accident*. It does not survive an adversary, and it
+> does not survive `export` — raw bytes carry no signature, so a consumer of an exported
+> bundle cannot check a `verified` claim at all. That matters most for the case the format
+> is designed for: a bundle that has been shared.
 
 ## The one seam: personal vs corporate
 
@@ -128,9 +136,19 @@ Everything is identical across both except **enforcement of who may hold which b
 | Service | none | yes |
 
 A personal concept graduates to corporate by gaining an ACL record, not by migrating.
-Note that **revocation remains unsolved** — git cannot revoke; once cloned, revoked is
-fiction. This is the surviving argument for a corporate boundary and it is not addressed
-by any decision here.
+
+**What justifies the corporate boundary is prefilter enforcement, not revocation.**
+Authorization applied before ANN is measured (E1, recall ≥0.95); post-filtering an
+approximate index destroys recall, and a file-first design has nowhere to put a prefilter.
+That is the real seam.
+
+**Revocation remains unsolved, but it is not a git problem** — and an earlier version of
+this document implied it was. No substrate that hands someone the bytes can take them back:
+not files, not SQLite, and least of all a CRDT, which is *designed* to replicate every
+change to every replica. The only mechanism that changes the answer is crypto-shredding —
+encrypt at rest, hold the keys centrally, destroy the key — which is orthogonal to storage
+and works on git as well as anything else. It is weaker still here than elsewhere, because
+retrieval hands whole files to a model: by the time you revoke, the content has been read.
 
 ## Evidence status
 

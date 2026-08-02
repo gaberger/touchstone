@@ -411,8 +411,14 @@ is has not been decided.
 
 ## Still open
 
-- **Revocation** — unaddressed by any experiment, and the surviving argument for a
-  corporate boundary.
+- **The trust invariant has no enforcement mechanism.** Signed commits and a CI gate are
+  specified (ADR-2608010930) and neither is built: no `.github/workflows`, and
+  `VersionControl::attest` has no caller. `export` carries no signature either, so a shared
+  bundle's `verified` claims are uncheckable by design-so-far. Highest-value open item.
+- **Revocation** — unaddressed by any experiment, and *not* a git problem: no substrate that
+  distributes the bytes can retract them, a CRDT least of all. Crypto-shredding is the only
+  mechanism that changes it. The corporate boundary is justified by prefilter enforcement
+  (E1), not by revocation — an earlier reading of this file said otherwise and was wrong.
 - **A10 / A3** (does it beat grep; will anyone write into it) — need the real corpus and
   three weeks. Unchanged, and now the **only** things standing between this and a verdict.
 - **A6 on real embeddings with ANN** — before deleting the corporate seam for good.
