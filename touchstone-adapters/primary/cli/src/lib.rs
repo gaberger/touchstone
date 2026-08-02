@@ -56,5 +56,8 @@ where
         Command::Export(a) => cmd::export::run(a, bundle, store),
         Command::Stats => cmd::stats::run(bundle, store),
         Command::Show(a) => cmd::show::run(a, bundle),
+        // Served by the composition root: it needs an async runtime and the full adapter set,
+        // neither of which belongs in a command handler.
+        Command::Mcp(_) => 0,
     }
 }

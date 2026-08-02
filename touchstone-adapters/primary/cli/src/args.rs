@@ -37,6 +37,8 @@ pub enum Command {
     Stats,
     /// Print one concept's derived view (parsed frontmatter with `--json`).
     Show(ShowArgs),
+    /// Serve the MCP tool surface (stdio by default).
+    Mcp(McpArgs),
 }
 
 #[derive(Args, Debug)]
@@ -82,6 +84,17 @@ pub struct NewArgs {
 pub struct FmtArgs {
     #[arg(long)]
     pub check: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct McpArgs {
+    /// Serve Streamable HTTP on this address instead of stdio, e.g. 127.0.0.1:8765.
+    ///
+    /// stdio is the default because it is how local agents attach and it has no network
+    /// surface. HTTP binds a socket that can read AND WRITE this bundle -- bind it to
+    /// loopback unless you have put authentication in front of it.
+    #[arg(long, value_name = "ADDR")]
+    pub http: Option<String>,
 }
 
 #[derive(Args, Debug)]

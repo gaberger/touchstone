@@ -22,3 +22,9 @@ touchstone-git-attest = { path = "../touchstone-adapters/secondary/git-attest" }
 touchstone-crdt-sync = { path = "../touchstone-adapters/secondary/crdt-sync" }
 touchstone-embed-local = { path = "../touchstone-adapters/secondary/embed-local" }
 rusqlite = { version = "0.40", features = ["bundled"] }
+# The MCP transports. tokio because MCP is async; axum to host the Streamable HTTP tower
+# service. Both live in the composition root, not in the MCP adapter -- choosing HOW to serve
+# is a wiring decision, and keeping it here means the tool surface stays transport-agnostic.
+rmcp = { version = "3.1", features = ["server", "transport-io", "transport-streamable-http-server"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "signal"] }
+axum = "0.8"
