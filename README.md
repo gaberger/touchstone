@@ -119,138 +119,140 @@ touchstone --bundle ~/brain init
 sign, and wiring your MCP client. Writing into someone's `.mcp.json` from a CLI is
 presumptuous, and the one time it guesses wrong it has edited a config it does not own.
 
-## A five-minute tour
+## Evidence
 
-Every block below is real output, captured from a live run. Start with an empty directory.
+Every block below is real output from a live run against [`_sample/`](_sample/) — a corpus of
+actual PDFs, PNGs, JPEGs, an MP4, CSV and prose. Nothing here is illustrative.
 
-**Capture something.** Frontmatter is emitted through a YAML dumper, never string
-concatenation — hand-written frontmatter with a `:` inside a value is the most common
-authoring error there is.
+### One command from a pile of files to a knowledge base
 
 ```console
-$ touchstone --bundle ~/brain new Note "Why files win" \
-    --description "Raw bytes outlive every tool that reads them." \
-    --tag design --generated capture/claude-opus-5
-notes/why-files-win.md
+$ touchstone --bundle ~/brain init
+$ touchstone --bundle ~/brain ingest _sample
+ingested raw/standup-2026-07-14.md
+ingested raw/demo-walkthrough.mp4
+...
+12 ingested. Nothing cites them yet -- `touchstone unprocessed` is the work queue.
 ```
+
+Binaries come back byte-identical — the property that makes "portable" mean something:
+
+```console
+$ cmp _sample/images/whiteboard-schema.png ~/brain/raw/whiteboard-schema.png && echo identical
+identical      # and the same for the MP4 and the PDF
+```
+
+### The agent gets the work and the material in one call
+
+```console
+$ touchstone --bundle ~/brain unprocessed --content --limit 1
+--- raw/interview-priya.txt
+Interview with Priya, 16 July 2026
+
+Q: which created_at does the finance report use?
+A: the ingest timestamp, not the order time. It has been wrong since the March migration.
+```
+
+### Capture is 0.01s warm, 0.38s cold
+
+```console
+$ time touchstone --bundle ~/brain capture "Finance report uses ingested_at, not order time."
+decisions/finance-report-uses-ingested-at-not-order-time.md
+real 0.38          # first run; 0.01 once the binary is in page cache
+```
+
+Both numbers are quoted because the first measurement was the cold one, and quietly swapping in
+the warmer figure later would be the kind of thing this file exists not to do. Either clears the
+~20 second bar PROTOTYPE.md sets, by a factor of fifty or more — and it observes that capture
+dies above that bar, which is why the number matters at all.
+
+### Citing a source drains the queue
+
+The concept cites two raw documents in `sources:`. Both leave the queue — no state file, no
+bookkeeping; a document is processed exactly when something cites it.
+
+```console
+$ touchstone --bundle ~/brain unprocessed
+9 of 11 raw documents uncited
+```
+
+### Search finds it by what was asked, not what was typed
+
+```console
+$ touchstone --bundle ~/brain search "which timestamp does the finance report use" --limit 2
+* decisions/finance-report-uses-ingested-at-not-order-time.md
+    Finance report uses ingested_at, not order time  [Decision]
+```
+
+The question shares almost no vocabulary with the title. Until recently this returned
+**nothing at all** — see the honest note below.
+
+### The provenance chain, end to end
+
+```console
+$ touchstone --bundle ~/brain verify
+  claims human verification with no attestation
+0 of 1 human claims backed                                    # a claim is just text
+
+$ touchstone --bundle ~/brain attest decisions/finance-...md --as human:gary --key ~/.ssh/id_ed25519
+$ touchstone --bundle ~/brain verify
+1 of 1 human claims backed                                    # now it is checkable
+
+$ echo "an edit nobody verified" >> decisions/finance-...md
+$ touchstone --bundle ~/brain verify
+STALE: decisions/finance-report-uses-ingested-at-not-order-time.md
+  signed, but the concept changed since -- the verified bytes are not these bytes
+```
+
+The signature covers the **content digest**, not the path. Editing a signed concept invalidates
+its attestation rather than carrying it along — which is the difference between provenance and
+a badge.
+
+### It holds at scale
+
+| | before | after |
+|---|---|---|
+| index 50,000 concepts | 1,028 s | **11.85 s** |
+| query | 0.26 s | **0.11 s** |
+
+The 17 minutes was one word: the FTS table declared `path UNINDEXED`, so deleting by path was a
+full scan once per concept — quadratic. `FINDINGS.md` E10.
+
+### Evidence that the tooling is the point
+
+While writing this section, hand-editing frontmatter to add a source, I wrote:
 
 ```yaml
----
-id: fd43e3b93413
-type: Note
-title: Why files win
-description: Raw bytes outlive every tool that reads them.
-tags:
-- design
-status: draft
-generated:
-  by: capture/claude-opus-5
-  at: 2026-08-02T15:53:17Z
----
-
-# Why files win
+title: Re: margin restatement
 ```
 
-Note what is **not** there: no `verified`. An agent may not assert human verification, so
-`--generated` produces a `machine` concept and there is no flag that produces a `human` one.
-
-**Index it.** Idempotent, incremental on content hash.
+which is invalid YAML — a `: ` inside an unquoted value. `lint` caught it immediately:
 
 ```console
-$ touchstone --bundle ~/brain index
-indexed 2 concepts (2 new, 0 changed, 0 removed)
-index.md files written: 3
-broken links: 0 (legal per spec -- not-yet-written knowledge)
+error: invalid YAML: mapping values are not allowed in this context at line 17 column 14
 ```
 
-Broken links are reported, never rejected — a link to a concept you have not written yet is
-knowledge about your own gaps.
+FINDINGS E3d names that exact mistake as "the single most likely authoring error", which is why
+`new` and `capture` emit frontmatter through a YAML dumper and never by string concatenation.
+The failure above happened because I bypassed them.
 
-**Search returns paths, not chunks.** The agent reads whole files.
+### What is measured, and what is not
 
-```console
-$ touchstone --bundle ~/brain search "raw bytes" --limit 3
-~ notes/why-files-win.md
-    Why files win  [Note]
-    Raw bytes outlive every tool that reads them.
+Honest, because a README that only lists wins is not evidence:
 
-* human-verified   ~ machine-generated
-```
+| | |
+|---|---|
+| Byte-exact round trip, incl. binaries | **measured** — T2a, M1 |
+| Deterministic rebuild | **measured** — T1 across 5 bundles |
+| 50k concepts | **measured** — E10 |
+| Signed provenance, tamper-evident | **measured** — 5 attestation drills |
+| Beats `rg` on real questions | **weak** — 18/20 vs a fair baseline's 11/20, caveated (E11) |
+| Anyone writes into it unprompted | **untested** — A3, instrumented and waiting |
 
-The `~` is the trust tier, and it is **derived, never authored**: `verified[].by` starting
-with `human:` outranks `generated` outranks neither. Ranking depends on it.
-
-**Everything above the bundle is disposable.** Delete the derived plane and rebuild:
-
-```console
-$ rm -rf ~/brain/.touchstone && find ~/brain -name index.md -delete
-$ touchstone --bundle ~/brain index -q && touchstone --bundle ~/brain stats
-concepts: 2
-```
-
-Byte-identical, and drill T1 asserts it on every run — against this fixture and four
-third-party bundles.
-
-Note the precision: *generated* `index.md`. An `index.md` in a directory holding no concepts
-is authored knowledge — often the only description of a PDF or a script sitting beside it —
-and touchstone neither writes nor destroys it (E8).
-
-**Lint catches what actually goes wrong**, which is duplicates rather than schema violations:
-
-```console
-$ touchstone --bundle ~/brain lint
-notes/bad.md
-  - duplicate tags: a
-  - verified entry missing required `by`
-  - body contains [[wikilinks]] -- not OKF, will not resolve
-
-3 problem(s)
-$ echo $?
-1
-```
-
-**Leaving is a supported operation.** `export` copies raw bytes, so nothing can be dropped
-on the way out — there is no serializer in the write path to drop it:
-
-```console
-$ touchstone --bundle ~/brain export /tmp/leaving
-exported 2 concepts to /tmp/leaving
-```
-
-### Point an agent at it
-
-```console
-$ touchstone --bundle ~/brain mcp        # stdio; add --http 127.0.0.1:8765 for remote
-```
-
-```
-touchstone_discover    read-only
-touchstone_export      writes
-touchstone_fmt         writes
-touchstone_index       writes
-touchstone_lint        read-only
-touchstone_new         writes
-touchstone_search      read-only
-touchstone_show        read-only
-touchstone_stats       read-only
-```
-
-Every tool is annotated, so a client knows which calls need a human in the loop. An agent
-that knows nothing starts with `touchstone_discover` — one argument-free call returning the
-bundle's shape, the available filters, and the whole tool list.
-
-For Claude Code, add to `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "touchstone": {
-      "command": "touchstone",
-      "args": ["--bundle", "/absolute/path/to/brain", "mcp"]
-    }
-  }
-}
-```
+Two of this project's own claims were found false by the harnesses built to test them:
+search returned **zero results for 20 of 20** natural-language questions, and `export` silently
+dropped **every** artifact. Both are fixed; both passed every correctness test while broken,
+because correctness testing cannot see usefulness.
 
 ## Commands
 
