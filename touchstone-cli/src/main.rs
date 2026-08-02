@@ -75,8 +75,16 @@ fn main() {
         std::process::exit(mcp::serve(&bundle, args.http.as_deref()));
     }
 
+    // Export writes to a directory that is not known until arguments are parsed, and the CLI
+    // adapter cannot name a filesystem adapter (rule 5) -- so the composition root supplies the
+    // constructor and the command supplies the destination.
+    let make_sink = |out: &Path| -> Box<dyn touchstone_ports::ConceptSink> {
+        Box::new(FsBundle::new(out))
+    };
+
     let store: &mut dyn CliStore = &mut index;
-    let exit_code = touchstone_cli_adapter::run(&cli, &bundle, store, &files, &parser, &clock);
+    let exit_code =
+        touchstone_cli_adapter::run(&cli, &bundle, store, &files, &parser, &clock, &make_sink);
     std::process::exit(exit_code);
 }
 

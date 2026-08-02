@@ -2,6 +2,7 @@
 //! these `[dependencies]`. External crates (uuid) are permitted; internal touchstone-* adapter
 //! crates are not.
 
+use touchstone_ports as ports;
 use touchstone_ports::{
     Clock, Concept, ConceptParser, ConceptRepository, ConceptSink, FilteredSearch,
     IndexPopulator, NewConceptRequest, ParsedConcept, RawStore, SearchHit, SearchQuery,
@@ -379,7 +380,7 @@ pub fn capture_concept<P, W, C>(req: &CaptureRequest, parser: &P, sink: &W, cloc
 where
     P: ConceptParser,
     W: ConceptSink,
-    C: Clock,
+    C: Clock + ?Sized,
 {
     let subdir = req
         .subdir
@@ -1070,4 +1071,173 @@ mod tests {
         assert_eq!(index_bundle(&MinRepo), 0);
         assert!(search_bundle(&MinIdx, "q").is_empty());
     }
+}
+
+// ── ReindexBundle ─────────────────────────────────────────────────────────────
+
+/// What a full reindex did.
+#[derive(Debug, Default)]
+pub struct ReindexReport {
+    pub total: usize,
+    pub new: usize,
+    pub changed: usize,
+    pub removed: usize,
+    pub indexes_written: usize,
+    pub broken_links: usize,
+    /// `(path, error)` for every concept that failed the conformance floor. Reported, never
+    /// fatal: the spec requires consumers not to reject what they do not recognise.
+    pub non_conformant: Vec<(String, String)>,
+}
+
+/// The whole index pipeline: walk, parse, upsert what changed, drop what left, resolve edges,
+/// and regenerate every `index.md`.
+///
+/// **This function is why CLI and MCP cannot drift on the one command that writes the most.**
+/// It used to live inside the CLI's `index` command, which meant the MCP `touchstone_index`
+/// tool did everything except regenerate `index.md` — same name, same description, different
+/// effect on disk. That is precisely the divergence parity is supposed to prevent, and it
+/// survived because the two adapters shared a name rather than an implementation.
+///
+/// Incremental on content digest: a concept whose bytes are unchanged is not reparsed into the
+/// index. The `index.md` files are regenerated unconditionally, because they depend on the
+/// whole directory rather than on any one file.
+pub fn reindex_bundle<F, P, I>(files: &F, parser: &P, index: &mut I) -> ReindexReport
+where
+    F: ConceptRepository + RawStore + ConceptSink,
+    P: ConceptParser,
+    // ?Sized so a caller holding `&mut dyn BundleIndex` -- which the CLI does -- can pass it
+    // straight through without an extra generic layer.
+    I: ports::BundleIndex + ?Sized,
+{
+    let paths = files.paths();
+    let known: std::collections::HashSet<String> = paths.iter().cloned().collect();
+
+    let parsed: Vec<ParsedConcept> = paths
+        .iter()
+        .map(|p| {
+            let raw = files.raw_bytes(p).unwrap_or_default();
+            parser.parse(p, &raw)
+        })
+        .collect();
+
+    let mut report = ReindexReport { total: parsed.len(), ..Default::default() };
+    let prev = index.prev_digests();
+
+    for c in &parsed {
+        if !c.conformant() {
+            report
+                .non_conformant
+                .push((c.path.clone(), c.error.clone().unwrap_or_else(|| "not conformant".into())));
+        }
+        let digest = ports::fnv64(&c.raw);
+        if prev.get(&c.path).map(String::as_str) == Some(digest.as_str()) {
+            continue; // bytes unchanged -- nothing to re-derive
+        }
+        let rec = ports::IndexRecord {
+            path: c.path.clone(),
+            concept_type: c.concept_type.clone(),
+            title: c.title.clone(),
+            description: c.description.clone(),
+            body: c.body.clone(),
+            tags: c.tags.clone(),
+            trust: c.trust,
+            status: c.status.clone(),
+            stale_after: None,
+            fm_json: c.frontmatter_json.clone(),
+            conformant: c.conformant(),
+            error: c.error.clone(),
+            digest,
+            links: resolved_links(&c.path, &c.body),
+        };
+        let _ = index.upsert(&rec, &known);
+        if prev.contains_key(&c.path) {
+            report.changed += 1;
+        } else {
+            report.new += 1;
+        }
+    }
+
+    for gone in prev.keys().filter(|p| !known.contains(p.as_str())) {
+        let _ = index.remove(gone);
+        report.removed += 1;
+    }
+
+    // Once, over the whole set: a concept indexed late can resolve a link written earlier.
+    let _ = index.reresolve();
+    let _ = index.commit();
+
+    report.indexes_written = write_indexes(files, &parsed);
+    report.broken_links = index.broken_link_count();
+    report
+}
+
+fn resolved_links(path: &str, body: &str) -> Vec<String> {
+    ports::extract_links(body)
+        .into_iter()
+        .filter_map(|(_, target)| ports::resolve_link(path, &target))
+        .collect()
+}
+
+/// Regenerate `index.md` for every directory implied by the concept set, including ancestors
+/// that hold no concepts of their own.
+fn write_indexes<W: ConceptSink>(sink: &W, concepts: &[ParsedConcept]) -> usize {
+    use std::collections::{BTreeMap, HashSet};
+
+    let mut by_dir: BTreeMap<String, Vec<&ParsedConcept>> = BTreeMap::new();
+    for c in concepts {
+        let dir = c.path.rfind('/').map(|i| c.path[..i].to_string()).unwrap_or_default();
+        by_dir.entry(dir).or_default().push(c);
+    }
+
+    // Every ancestor directory gets an index too, so the tree is navigable from the root.
+    let mut dirs: HashSet<String> = HashSet::new();
+    dirs.insert(String::new());
+    for d in by_dir.keys() {
+        let mut parts: Vec<&str> = if d.is_empty() { vec![] } else { d.split('/').collect() };
+        while !parts.is_empty() {
+            dirs.insert(parts.join("/"));
+            parts.pop();
+        }
+    }
+
+    let count_under = |d: &str| -> usize {
+        by_dir
+            .iter()
+            .filter(|(k, _)| if d.is_empty() { true } else { *k == d || k.starts_with(&format!("{d}/")) })
+            .map(|(_, v)| v.len())
+            .sum()
+    };
+
+    let mut sorted: Vec<String> = dirs.into_iter().collect();
+    sorted.sort();
+
+    let mut written = 0;
+    for d in &sorted {
+        let depth = if d.is_empty() { 0 } else { d.split('/').count() };
+        let subdirs: Vec<(String, usize)> = sorted
+            .iter()
+            .filter(|other| *other != d)
+            .filter(|other| {
+                let od = if other.is_empty() { 0 } else { other.split('/').count() };
+                od == depth + 1
+                    && if d.is_empty() {
+                        !other.contains('/')
+                    } else {
+                        other.starts_with(&format!("{d}/")) && !other[d.len() + 1..].contains('/')
+                    }
+            })
+            .map(|k| {
+                (k.rsplit('/').next().unwrap_or(k).to_string(), count_under(k))
+            })
+            .collect();
+
+        let empty: Vec<&ParsedConcept> = Vec::new();
+        let here = by_dir.get(d).unwrap_or(&empty);
+        let text = ports::render_index(d, here, &subdirs, d.is_empty());
+        let rel = if d.is_empty() { "index.md".to_string() } else { format!("{d}/index.md") };
+        if sink.write(&rel, text.as_bytes()).is_ok() {
+            written += 1;
+        }
+    }
+    written
 }

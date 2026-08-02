@@ -220,3 +220,77 @@ fn the_adversarial_corpus_is_actually_present() {
         "fixture lost its unicode path -- CRLF/unicode round-trip is no longer being tested"
     );
 }
+
+// ── The two primary adapters must agree on bytes ────────────────────────────
+
+/// `touchstone index` and the MCP `touchstone_index` tool must leave the bundle in the same
+/// state, byte for byte.
+///
+/// This drill exists because they did not. The index pipeline lived inside the CLI command, so
+/// the MCP tool did everything except regenerate the `index.md` files — same name, same
+/// description, different effect on disk. Nothing caught it: the parity test compares tool
+/// *names*, and names were never the problem.
+///
+/// A name-level parity check cannot see this class of divergence. Only running both and
+/// diffing can, which is why this lives in the black-box suite rather than beside the unit
+/// tests of either adapter.
+#[test]
+fn cli_index_and_mcp_index_produce_identical_bytes() {
+    let src = workspace_root().join("_fixture");
+    let via_cli = Bundle::checkout(&src);
+    let via_mcp = Bundle::checkout(&src);
+
+    via_cli.ok(&["index", "-q"]);
+
+    // Drive the MCP surface over stdio: initialize, then call the tool.
+    let script = concat!(
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"conformance","version":"0"}}}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"touchstone_index","arguments":{}}}"#,
+        "\n",
+    );
+    let mut child = std::process::Command::new(touchstone_bin())
+        .arg("--bundle")
+        .arg(&via_mcp.root)
+        .arg("mcp")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("spawn mcp server");
+    {
+        use std::io::Write;
+        child.stdin.as_mut().unwrap().write_all(script.as_bytes()).unwrap();
+    }
+    let out = child.wait_with_output().expect("mcp server exits when stdin closes");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\"indexed\""),
+        "the MCP index tool did not report a result; got: {stdout}"
+    );
+
+    // Concept files are untouched by indexing, and every generated index.md must match.
+    let cli_files = via_cli.index_files();
+    let mcp_files = via_mcp.index_files();
+    assert!(!cli_files.is_empty(), "no index.md generated -- the comparison would be vacuous");
+    assert_eq!(
+        cli_files.keys().collect::<Vec<_>>(),
+        mcp_files.keys().collect::<Vec<_>>(),
+        "the two adapters generated different SETS of index.md files"
+    );
+    let differing: Vec<&String> = cli_files
+        .iter()
+        .filter(|(k, v)| mcp_files.get(*k) != Some(v))
+        .map(|(k, _)| k)
+        .collect();
+    assert!(
+        differing.is_empty(),
+        "CLI and MCP index disagree on {} file(s): {:?}\n\
+         Same name, same description, different bytes -- that is a parity failure the \
+         name-level check cannot see.",
+        differing.len(),
+        &differing[..differing.len().min(3)]
+    );
+}

@@ -76,9 +76,13 @@ an agent that believes it can attest is more dangerous than one that cannot try.
 - Streamable HTTP binds a socket that can read **and write** the bundle. There is no
   authentication in this surface — that is a deliberate omission, not an oversight, and it is why
   stdio is the default and the HTTP path prints a warning.
-- Only `lint` currently routes through the use cases on the CLI side; `index`/`search`/`fmt`/
-  `export`/`new` still carry command-local logic. Rule 4b checks the dependency, not every call
-  site, so the rule is satisfied while the migration is incomplete.
+- ~~Only `lint` routes through the use cases~~ — completed in P7. `index`, `fmt`, `export`,
+  `new`, `show` and `lint` all call use cases; `search` calls `BundleIndex::search` directly
+  because the whole pipeline lives inside the query and a wrapper would be ceremony.
+  `parse.rs`, `walk.rs` and `render.rs` were deleted from the CLI adapter — 1,110 lines.
+- `FilteredSearch` and `search_bundle_full` are now dead: nothing implements the port outside a
+  test fake. Left in place rather than removed in the same change; recorded here so it is a
+  decision rather than an oversight.
 
 **Mitigations:**
 - The conformance suite drives the binary black-box, so the CLI cannot regress silently while the
@@ -96,7 +100,7 @@ an agent that believes it can attest is more dangerous than one that cannot try.
 | P4 | AI-readiness rubric as assertions | Completed | test:cargo test -p touchstone-mcp-adapter --test ai_readiness |
 | P5 | CLI–MCP parity check (closes the gap ADR-019 left open) | Completed | test:cargo test -p touchstone-mcp-adapter --test parity |
 | P6 | stdio + Streamable HTTP transports in the composition root | Completed | code:touchstone-cli/src/main.rs |
-| P7 | Migrate the remaining CLI commands onto the use cases | Pending | test:cargo test -p touchstone-cli --test architecture |
+| P7 | Migrate the remaining CLI commands onto the use cases | Completed | test:cargo test -p touchstone-conformance --test fixture cli_index_and_mcp_index_produce_identical_bytes |
 | P8 | Authentication for the HTTP transport | Pending — gated on a real remote use case | — |
 
 ## References

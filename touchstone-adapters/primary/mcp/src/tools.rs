@@ -213,7 +213,12 @@ pub fn all() -> Vec<Tool> {
             json!({
                 "type": "object",
                 "properties": {
-                    "indexed": { "type": "integer" }, "errors": { "type": "array", "items": { "type": "object" } }
+                    "indexed": { "type": "integer" },
+                    "new": { "type": "integer" }, "changed": { "type": "integer" },
+                    "removed": { "type": "integer" },
+                    "indexes_written": { "type": "integer", "description": "Generated index.md files rewritten." },
+                    "broken_links": { "type": "integer", "description": "Unresolved links. Legal per spec -- not-yet-written knowledge." },
+                    "errors": { "type": "array", "items": { "type": "object" } }
                 },
                 "required": ["indexed", "errors"]
             }),
