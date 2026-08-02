@@ -243,6 +243,8 @@ For Claude Code, add to `.mcp.json`:
 | `touchstone stats` | Concepts by type, trust tier, status; link and broken-link counts |
 | `touchstone show <path>` | One concept's derived view. `--json` emits parsed frontmatter verbatim |
 | `touchstone mcp [--http ADDR]` | Serve the MCP tool surface. stdio by default; Streamable HTTP on request |
+| `touchstone attest <path>` | Sign a concept's existing `verified` claim. **CLI only** — agents may not attest |
+| `touchstone verify` | Check every `human:` claim against the signed manifest. Non-zero if any fails |
 
 Filters: `--type`, `--tag`, `--status`, `--trust`, `--limit`, `--no-expand`.
 
@@ -297,9 +299,19 @@ frontmatter keys, and broken links are all preserved and indexed — the spec re
 consumers not reject them, and broken links legitimately represent not-yet-written
 knowledge.
 
-**Trust tiers are spec-derived.** `verified[].by` starting with `human:` → trusted;
-`generated` present without human verification → machine; neither → unattributed. Search
-ranks on this. No agent may ever write `verified`.
+**Trust tiers are spec-derived, and now signed.** `verified[].by` starting with `human:` →
+trusted; `generated` present without human verification → machine; neither → unattributed.
+Search ranks on this. No agent may ever write `verified` — and `touchstone verify` checks that
+every such claim carries a valid signature over the concept's *current* bytes, so editing after
+signing invalidates the attestation rather than inheriting it.
+
+```console
+$ touchstone --bundle ~/brain verify
+STALE: notes/checked.md
+  signed, but the concept changed since -- the verified bytes are not these bytes
+
+0 of 1 human claims backed
+```
 
 ## What is tested, and what is not
 
@@ -317,13 +329,12 @@ Not tested, and load-bearing:
 - **Scale** — the fixture is 25 concepts. Nothing here says anything about 50,000.
 - **Round-trip against the upstream sample bundles** — the fixture is adversarial but
   self-authored, which is its weakness.
-- **The trust invariant is enforced by nothing.** `verified: {by: human:...}` is meant to be
-  backed by a signed commit, with CI rejecting unsigned deltas. Neither exists: there is no
-  CI, and nothing calls the attestation adapter. `touchstone new` cannot write `verified`, so
-  the tier survives accident but not an adversary — and `export` carries raw bytes with no
-  signature, so a consumer of a shared bundle cannot check a claim at all. **This is the
-  highest-value open item**, because provenance you cannot verify is the one thing this
-  project says it is for.
+- **Who to trust is still open.** Claims are now signed and verifiable (E12), but
+  `attest/allowed_signers` is the bundle's own assertion about its signers, not a PKI. A
+  bundle shipping a forged signers file is internally consistent. What is established is that
+  a claim cannot be added, or its content changed, without detection.
+- **No CI gate.** There is still no `.github/workflows`, so nothing runs `verify` or the
+  conformance suite on push.
 - **Revocation** — unsolved, and *not* a git problem: no substrate that hands over the bytes
   can take them back, a CRDT least of all. Crypto-shredding is the only mechanism that
   changes the answer, and it is orthogonal to storage. The corporate boundary is justified by

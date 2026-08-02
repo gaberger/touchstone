@@ -46,6 +46,7 @@ pub const TOOL_NAMES: &[&str] = &[
     "touchstone_search",
     "touchstone_show",
     "touchstone_stats",
+    "touchstone_verify",
 ];
 
 fn obj(v: Value) -> Arc<Map<String, Value>> {
@@ -357,6 +358,27 @@ pub fn all() -> Vec<Tool> {
                 "required": ["concepts", "links", "broken_links"]
             }),
             read_only("Summarise the bundle"),
+        ),
+        tool(
+            "touchstone_verify",
+            "Verify signed claims",
+            "Check that every concept claiming human verification is backed by a valid signature \
+             over its CURRENT bytes. Reports three distinct failures: `unbacked` (claimed, never \
+             signed), `stale` (signed, then edited -- the verified bytes are not these bytes), and \
+             `bad_signature` (forged, or signed by a key this bundle does not list). Use this \
+             before relying on a `human` trust tier from a bundle you did not author. NOTE: you \
+             cannot create attestations -- signing is deliberately unavailable to agents.",
+            json!({ "type": "object", "additionalProperties": false }),
+            json!({
+                "type": "object",
+                "properties": {
+                    "checked": { "type": "integer" }, "backed": { "type": "integer" },
+                    "clean": { "type": "boolean" },
+                    "problems": { "type": "array", "items": { "type": "object" } }
+                },
+                "required": ["checked", "backed", "clean", "problems"]
+            }),
+            read_only("Verify signed claims"),
         ),
     ]
 }

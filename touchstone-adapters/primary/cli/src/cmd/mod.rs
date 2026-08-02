@@ -1,3 +1,4 @@
+pub mod attest;
 pub mod export;
 pub mod fmt;
 pub mod index;
@@ -6,3 +7,4 @@ pub mod new;
 pub mod search;
 pub mod show;
 pub mod stats;
+pub mod verify;

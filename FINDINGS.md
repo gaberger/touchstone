@@ -604,12 +604,57 @@ answered, over their own notes, remains the experiment that decides. What this r
 is narrower and still useful: on a real corpus, with a fair baseline, the null hypothesis did
 not hold.
 
+## E12 — the trust invariant is now enforced by something
+
+For the whole life of the project, `verified: {by: human:gary}` was text a human typed. There
+was no CI, `VersionControl::attest` had no caller, and `export` carried the claim to a stranger
+with no way to check it. That was survivable while the bundle was private and the threat model
+was accident. It stopped being survivable when the repository turned out to be public: anyone
+could fork a bundle, add a `human:` line, and inherit the tier that outranks machine-generated
+text in every retrieval decision.
+
+`touchstone attest` signs an existing claim with an SSH key. `touchstone verify` checks every
+claim and separates four outcomes, because collapsing them is how a verifier ends up reporting
+"fine" for a bundle that was edited after signing:
+
+| status | meaning |
+|---|---|
+| **backed** | valid signature by a listed key, over the current bytes |
+| **unbacked** | claims `human:` verification, never signed |
+| **stale** | signed, then edited — the claim and signature are both real, and the bytes are not the ones verified |
+| **bad signature** | forged, corrupted, or signed by a key the bundle does not list |
+
+Three decisions carry the design:
+
+1. **The signature covers the content digest, not the path.** A signature over a filename
+   survives an edit and attests to nothing. This is what makes `stale` detectable.
+2. **`attest/` is not dot-prefixed**, so the manifest and `allowed_signers` are artifacts and
+   `export` carries them. A signature that does not travel with the bytes it signs protects
+   nobody, and the exported bundle is exactly what a stranger receives. Drilled: an exported
+   bundle verifies on its own.
+3. **`attest` is CLI-only** — the single deliberate hole in CLI–MCP parity, recorded in
+   `CLI_ONLY` with its reason. An agent may never write a human verification claim; exposing
+   signing over MCP would hand a model precisely the capability the invariant forbids, at the
+   exact moment the signature started to mean something. Agents get `touchstone_verify`.
+
+Also closes the last `DEFERRED` adapter. `touchstone-git-attest` was listed as an orphan —
+implemented, tested, and called by nothing — since rule 6b started demanding that wiring mean
+*used*. It is now the signing adapter, shelling out to `ssh-keygen -Y` rather than linking a
+crypto library, on the same reasoning that had it shelling out to `git`.
+
+**What this does not establish is who to trust.** `allowed_signers` is the bundle's own
+assertion about its signers, not a PKI, and a bundle that ships a forged signers file is
+self-consistent. What it establishes is narrower and still worth having: a claim cannot be
+added, and its content cannot be changed, without detection by anyone who holds the bundle.
+
 ## Still open
 
-- **The trust invariant has no enforcement mechanism.** Signed commits and a CI gate are
-  specified (ADR-2608010930) and neither is built: no `.github/workflows`, and
-  `VersionControl::attest` has no caller. `export` carries no signature either, so a shared
-  bundle's `verified` claims are uncheckable by design-so-far. Highest-value open item.
+- ~~**The trust invariant has no enforcement mechanism**~~ — resolved; see E12. Claims are
+  signed, verification travels with the bundle, and `verify` exits non-zero on any unbacked,
+  stale or forged claim. What remains unaddressed is *who to trust*: `allowed_signers` is the
+  bundle's own assertion, not a PKI.
+- **No CI gate.** `touchstone verify` and `tests/verify.sh` are not run on push; there is still
+  no `.github/workflows`.
 - **Revocation** — unaddressed by any experiment, and *not* a git problem: no substrate that
   distributes the bytes can retract them, a CRDT least of all. Crypto-shredding is the only
   mechanism that changes it. The corporate boundary is justified by prefilter enforcement

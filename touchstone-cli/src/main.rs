@@ -17,6 +17,7 @@ use touchstone_cli_adapter::{Cli, CliStore};
 use touchstone_fs_bundle::{find_bundle, FsBundle};
 use touchstone_ports::Clock;
 use touchstone_sqlite_index::SqliteIndex;
+use touchstone_git_attest::GitAttest;
 use touchstone_yaml_serde::YamlSerde;
 
 // ── SystemClock ───────────────────────────────────────────────────────────────
@@ -68,6 +69,7 @@ fn main() {
     let files = FsBundle::new(&bundle);
     let parser = YamlSerde;
     let clock = SystemClock;
+    let vc = GitAttest;
 
     // `mcp` is served here rather than dispatched as a command: it needs an async runtime and
     // the whole adapter set, neither of which belongs inside a command handler.
@@ -84,7 +86,7 @@ fn main() {
 
     let store: &mut dyn CliStore = &mut index;
     let exit_code =
-        touchstone_cli_adapter::run(&cli, &bundle, store, &files, &parser, &clock, &make_sink);
+        touchstone_cli_adapter::run(&cli, &bundle, store, &files, &parser, &clock, &vc, &make_sink);
     std::process::exit(exit_code);
 }
 
@@ -102,7 +104,8 @@ mod mcp {
     use touchstone_fs_bundle::FsBundle;
     use touchstone_mcp_adapter::Surface;
     use touchstone_sqlite_index::SqliteIndex;
-    use touchstone_yaml_serde::YamlSerde;
+    use touchstone_git_attest::GitAttest;
+use touchstone_yaml_serde::YamlSerde;
 
     type Ts = Surface<FsBundle, YamlSerde, SqliteIndex, SystemClock>;
 
@@ -117,6 +120,7 @@ mod mcp {
             YamlSerde,
             index,
             SystemClock,
+            Box::new(GitAttest),
         ))
     }
 

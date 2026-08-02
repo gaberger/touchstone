@@ -41,7 +41,54 @@ pub trait ConceptRepository {
     fn artifact_paths(&self) -> Vec<String>;
 }
 pub trait SearchIndex { fn search(&self, q: &str) -> Vec<Concept>; }
-pub trait VersionControl { fn attest(&self, path: &str) -> Result<(), String>; }
+/// A signed statement that a named human verified specific bytes.
+///
+/// `digest` pins the CONTENT, not the path: re-signing is required if the concept changes,
+/// which is the property that makes an attestation mean something. A signature over a filename
+/// would survive an edit and attest to nothing.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Attestation {
+    pub path: String,
+    pub digest: String,
+    /// Actor identifier, e.g. `human:gary`. Must match the `verified[].by` it backs.
+    pub signer: String,
+    pub at: String,
+    /// Armored detached signature over the canonical payload.
+    pub signature: String,
+}
+
+impl Attestation {
+    /// The exact bytes that get signed. Deterministic and order-fixed, so a verifier
+    /// reconstructs precisely what the signer saw.
+    pub fn payload(path: &str, digest: &str, signer: &str, at: &str) -> String {
+        format!("touchstone-attestation-v1\n{path}\n{digest}\n{signer}\n{at}\n")
+    }
+}
+
+/// Signing and verification of `verified` claims.
+///
+/// This port exists because the trust invariant was, for the whole life of the project,
+/// enforced by nothing: `verified: {by: human:gary}` was text a human typed, and `export`
+/// carried it to a stranger with no way to check it. A claim nobody can verify is decoration
+/// on the one field the ranking model depends on.
+pub trait VersionControl {
+    fn attest(&self, path: &str) -> Result<(), String>;
+
+    /// Sign `payload`, returning an armored detached signature.
+    fn sign(&self, payload: &str, key: &str) -> Result<String, String>;
+
+    /// True when `signature` is a valid signature over `payload` by `signer`, according to
+    /// `allowed_signers` — passed as CONTENT, not a path.
+    ///
+    /// Content because the adapter cannot see inside a bundle: it has no notion of a bundle
+    /// root, and handing it a bundle-relative path produced a verifier that silently failed
+    /// every check. The use-case layer reads the file; the adapter just needs the bytes.
+    ///
+    /// False means forged, tampered, or signed by someone the bundle does not list. The caller
+    /// does not get to tell those apart, and should not.
+    fn verify(&self, payload: &str, signature: &str, signer: &str, allowed_signers: &str)
+        -> Result<bool, String>;
+}
 pub trait SyncEngine { fn merge(&self, path: &str) -> Result<(), String>; }
 pub trait Embedder { fn embed(&self, text: &str) -> Vec<f32>; }
 pub trait Clock { fn now_iso8601(&self) -> String; }
