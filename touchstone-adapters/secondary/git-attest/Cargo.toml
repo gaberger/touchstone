@@ -3,6 +3,9 @@
 name = "touchstone-git-attest"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "touchstone: git-attest adapter"
 
 [dependencies]
 touchstone-ports = { path = "../../../touchstone-ports" }

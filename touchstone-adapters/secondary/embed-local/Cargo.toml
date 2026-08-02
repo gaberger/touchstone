@@ -3,6 +3,9 @@
 name = "touchstone-embed-local"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "touchstone: embed-local adapter"
 
 [dependencies]
 touchstone-ports = { path = "../../../touchstone-ports" }

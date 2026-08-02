@@ -9,6 +9,9 @@
 name = "touchstone-conformance"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "touchstone: OKF conformance suite, as a black-box gate over any implementation"
 
 [dependencies]
 serde_json = "1"

@@ -2,6 +2,7 @@ pub mod attest;
 pub mod export;
 pub mod fmt;
 pub mod index;
+pub mod init;
 pub mod ingest;
 pub mod lint;
 pub mod new;

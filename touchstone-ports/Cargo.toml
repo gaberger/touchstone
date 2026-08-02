@@ -3,6 +3,9 @@
 name = "touchstone-ports"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "touchstone: port traits"
 
 [dependencies]
 touchstone-domain = { path = "../touchstone-domain" }

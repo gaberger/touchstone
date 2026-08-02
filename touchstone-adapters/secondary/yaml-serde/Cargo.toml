@@ -3,6 +3,9 @@
 name = "touchstone-yaml-serde"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "touchstone: yaml-serde adapter"
 
 [dependencies]
 touchstone-ports = { path = "../../../touchstone-ports" }
