@@ -57,11 +57,12 @@ where
         Command::Show(a) => cmd::show::run(a, files, parser),
         // Served by the composition root: it needs an async runtime and the full adapter set,
         // neither of which belongs in a command handler.
-        Command::Mcp(_) => 0,
+        Command::Mcp(_) | Command::Watch => 0,
         Command::Verify => cmd::verify::run(files, parser, vc),
+        Command::Capture(a) => cmd::capture::run(a, parser, files, clock),
         Command::Init => cmd::init::run(bundle, files),
         Command::Ingest(a) => cmd::ingest::run(a, files),
-        Command::Unprocessed => cmd::unprocessed::run(files, parser),
+        Command::Unprocessed(a) => cmd::unprocessed::run(a, files, parser),
         Command::Attest(a) => cmd::attest::run(a, files, parser, vc, clock),
     }
 }

@@ -37,16 +37,20 @@ pub enum Command {
     Stats,
     /// Print one concept's derived view (parsed frontmatter with `--json`).
     Show(ShowArgs),
+    /// Reindex continuously as files change. Runs until interrupted.
+    Watch,
     /// Serve the MCP tool surface (stdio by default).
     Mcp(McpArgs),
     /// Check that this bundle's `verified` claims are backed by valid signatures.
     Verify,
+    /// Record a thought in one command. No editor, no title needed.
+    Capture(CaptureArgs),
     /// Create the bundle layout and print the setup you still have to do.
     Init,
     /// Copy source documents into the immutable `raw/` layer.
     Ingest(IngestArgs),
     /// List raw documents no concept cites yet.
-    Unprocessed,
+    Unprocessed(UnprocessedArgs),
     /// Sign a concept's existing `verified` claim. CLI only -- an agent may not attest.
     Attest(AttestArgs),
 }
@@ -94,6 +98,31 @@ pub struct NewArgs {
 pub struct FmtArgs {
     #[arg(long)]
     pub check: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct UnprocessedArgs {
+    /// Include each document's content, so an agent has everything it needs in one call.
+    #[arg(long)]
+    pub content: bool,
+    #[arg(long, default_value = "10")]
+    pub limit: usize,
+}
+
+#[derive(Args, Debug)]
+pub struct CaptureArgs {
+    /// The thought. Quote it, or just type it -- trailing words are joined.
+    #[arg(required = true)]
+    pub text: Vec<String>,
+    /// Override the inferred title.
+    #[arg(long)]
+    pub title: Option<String>,
+    #[arg(long = "type", default_value = "Note")]
+    pub concept_type: String,
+    #[arg(long = "tag", action = clap::ArgAction::Append)]
+    pub tags: Vec<String>,
+    #[arg(long)]
+    pub dir: Option<String>,
 }
 
 #[derive(Args, Debug)]

@@ -1,4 +1,5 @@
 pub mod attest;
+pub mod capture;
 pub mod export;
 pub mod fmt;
 pub mod index;

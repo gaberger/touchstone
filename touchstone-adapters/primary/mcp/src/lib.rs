@@ -323,10 +323,27 @@ where
     fn t_unprocessed(&self, args: &Map<String, Value>) -> CallToolResult {
         let pending = unprocessed_raw(&self.files, &self.parser);
         let limit = Self::limit_arg(args);
+        let with_content = Self::bool_arg(args, "content", false);
+        let docs: Vec<Value> = pending
+            .iter()
+            .take(limit)
+            .map(|p| {
+                if with_content {
+                    let body = self
+                        .files
+                        .raw_bytes(p)
+                        .map(|b| String::from_utf8_lossy(&b).to_string())
+                        .unwrap_or_default();
+                    json!({ "path": p, "content": body })
+                } else {
+                    json!({ "path": p })
+                }
+            })
+            .collect();
         Self::ok(json!({
             "total": self.files.raw_paths().len(),
             "uncited": pending.len(),
-            "documents": pending.iter().take(limit).collect::<Vec<_>>(),
+            "documents": docs,
         }))
     }
 

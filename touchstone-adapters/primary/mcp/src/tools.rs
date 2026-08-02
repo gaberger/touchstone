@@ -416,14 +416,21 @@ pub fn all() -> Vec<Tool> {
              concept names it, so there is no separate state to go stale.",
             json!({
                 "type": "object",
-                "properties": { "limit": limit_prop() },
+                "properties": {
+                    "limit": limit_prop(),
+                    "content": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Include each document's full text, so you can compile without a second call per document."
+                    }
+                },
                 "additionalProperties": false
             }),
             json!({
                 "type": "object",
                 "properties": {
                     "total": { "type": "integer" }, "uncited": { "type": "integer" },
-                    "documents": { "type": "array", "items": { "type": "string" } }
+                    "documents": { "type": "array", "items": { "type": "object" } }
                 },
                 "required": ["total", "uncited", "documents"]
             }),
